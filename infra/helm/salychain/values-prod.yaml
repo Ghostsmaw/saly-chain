@@ -1,0 +1,56 @@
+# Production overrides — HA, conservative logging, ingress + TLS on.
+global:
+  image:
+    tag: stable
+  sharedEnv:
+    NODE_ENV: production
+    LOG_LEVEL: info
+    NATS_URL: nats://nats:4222
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+
+defaults:
+  replicas: 3
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 768Mi
+
+services:
+  - { name: gateway, port: 4000, public: true, replicas: 4 }
+  - { name: ledger, port: 4001, replicas: 3 }
+  - { name: wallet, port: 4002, replicas: 3 }
+  - { name: execution, port: 4003, replicas: 4 }
+  - { name: compliance, port: 4004 }
+  - { name: risk, port: 4005 }
+  - { name: liquidity, port: 4006 }
+  - { name: routing, port: 4007 }
+  - { name: intent, port: 4008, replicas: 4 }
+  - { name: apikeys, port: 4009 }
+  - { name: webhooks, port: 4010 }
+  - { name: agents, port: 4011 }
+  - { name: identity, port: 4012 }
+  - { name: contract-registry, port: 4013 }
+  - { name: admin, port: 4014 }
+  - { name: signer, port: 4099, replicas: 3 }
+
+ingress:
+  enabled: true
+  className: nginx
+  apiHost: api.salychain.io
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    - hosts:
+        - api.salychain.io
+        - portal.salychain.io
+        - admin.salychain.io
+        - business.salychain.io
+      secretName: salychain-prod-tls
+
+apps:
+  - { name: portal, port: 3000, host: portal.salychain.io, replicas: 3 }
+  - { name: admin, port: 3000, host: admin.salychain.io }
+  - { name: business, port: 3000, host: business.salychain.io, replicas: 3 }

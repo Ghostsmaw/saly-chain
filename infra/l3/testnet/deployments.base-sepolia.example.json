@@ -1,0 +1,30 @@
+{
+  "network": "saly-testnet",
+  "settlement": "base-sepolia",
+  "chain_id": 845320002,
+  "settlement_chain_id": 84532,
+  "deployed_at": "REPLACE_AFTER_DEPLOY",
+  "l3_rpc_url": "https://l3-testnet-rpc.example.com",
+  "settlement_rpc_url": "https://sepolia.base.org",
+  "contracts": {
+    "l2OutputOracle": "0x0000000000000000000000000000000000000000",
+    "batchInbox": "0x0000000000000000000000000000000000000000",
+    "optimismPortal": "0x0000000000000000000000000000000000000000",
+    "l1StandardBridge": "0x0000000000000000000000000000000000000000",
+    "l2StandardBridge": "0x0000000000000000000000000000000000000000"
+  },
+  "assets": {
+    "SalySD": "0x0000000000000000000000000000000000000000",
+    "USDC": "0x0000000000000000000000000000000000000000",
+    "SalyAttestationRegistry": "0x0000000000000000000000000000000000000000",
+    "SalyAssetToken": "0x0000000000000000000000000000000000000000",
+    "SalyAgentRegistry": "0x0000000000000000000000000000000000000000",
+    "SalyStreamPay": "0x0000000000000000000000000000000000000000"
+  },
+  "governance": {
+    "token": "0x0000000000000000000000000000000000000000",
+    "timelock": "0x0000000000000000000000000000000000000000",
+    "governor": "0x0000000000000000000000000000000000000000"
+  },
+  "notes": "Copy to deployments.base-sepolia.json after op-deployer apply. Never commit secrets."
+}

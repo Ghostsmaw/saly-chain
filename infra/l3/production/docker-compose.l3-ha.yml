@@ -1,0 +1,208 @@
+# SalyChain L3 — production HA stack (Base mainnet settlement)
+#
+# Conductor raft cluster + op-geth sequencer/replicas + batcher/proposer.
+# Fault-proof mode: proposer targets DisputeGameFactory (see .env).
+#
+# Bring up: pnpm l3:production:up
+
+name: saly-l3-production
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '50m'
+    max-file: '5'
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt:
+    - 'no-new-privileges:true'
+  cap_drop:
+    - ALL
+  logging: *default-logging
+
+networks:
+  saly_l3_prod:
+    name: saly_l3_prod
+    driver: bridge
+
+volumes:
+  l3_geth_seq_data:
+  l3_geth_rep1_data:
+  l3_geth_rep2_data:
+  conductor_1_data:
+  conductor_2_data:
+  conductor_3_data:
+
+services:
+  op-geth-sequencer:
+    <<: *hardening
+    image: ${OP_GETH_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101411.4}
+    container_name: saly-l3-geth-seq
+    entrypoint: ['/bin/sh', '/config/op-geth-entrypoint.sh']
+    ports:
+      - '${L3_GETH_HTTP_PORT:-9545}:8545'
+    volumes:
+      - l3_geth_seq_data:/data
+      - ./artifacts:/artifacts:ro
+      - ./config:/config:ro
+    environment:
+      GETH_DATADIR: /data
+      GETH_GENESIS: /artifacts/genesis.json
+      GETH_JWT: /artifacts/jwt.txt
+      L2_CHAIN_ID: ${L2_CHAIN_ID:-845320003}
+      SEQUENCER_HTTP: http://op-node-1:8547
+    healthcheck:
+      test: ['CMD-SHELL', "geth attach --exec 'eth.blockNumber' /data/geth.ipc >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks: [saly_l3_prod]
+    mem_limit: ${L3_GETH_MEM_LIMIT:-4g}
+
+  op-geth-replica-1:
+    <<: *hardening
+    image: ${OP_GETH_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101411.4}
+    container_name: saly-l3-geth-rep1
+    entrypoint: ['/bin/sh', '/config/op-geth-replica-entrypoint.sh']
+    ports:
+      - '${L3_GETH_REPLICA_1_PORT:-9548}:8545'
+    volumes:
+      - l3_geth_rep1_data:/data
+      - ./artifacts:/artifacts:ro
+      - ./config:/config:ro
+    environment:
+      GETH_DATADIR: /data
+      GETH_GENESIS: /artifacts/genesis.json
+      GETH_JWT: /artifacts/jwt.txt
+      L2_CHAIN_ID: ${L2_CHAIN_ID:-845320003}
+      SEQUENCER_HTTP: http://op-node-1:8547
+    depends_on:
+      op-geth-sequencer:
+        condition: service_healthy
+    networks: [saly_l3_prod]
+    mem_limit: ${L3_GETH_REPLICA_MEM_LIMIT:-2g}
+
+  op-geth-replica-2:
+    <<: *hardening
+    image: ${OP_GETH_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101411.4}
+    container_name: saly-l3-geth-rep2
+    entrypoint: ['/bin/sh', '/config/op-geth-replica-entrypoint.sh']
+    ports:
+      - '${L3_GETH_REPLICA_2_PORT:-9549}:8545'
+    volumes:
+      - l3_geth_rep2_data:/data
+      - ./artifacts:/artifacts:ro
+      - ./config:/config:ro
+    environment:
+      GETH_DATADIR: /data
+      GETH_GENESIS: /artifacts/genesis.json
+      GETH_JWT: /artifacts/jwt.txt
+      L2_CHAIN_ID: ${L2_CHAIN_ID:-845320003}
+      SEQUENCER_HTTP: http://op-node-2:8547
+    depends_on:
+      op-geth-sequencer:
+        condition: service_healthy
+    networks: [saly_l3_prod]
+    mem_limit: ${L3_GETH_REPLICA_MEM_LIMIT:-2g}
+
+  op-conductor-1:
+    <<: *hardening
+    image: ${OP_CONDUCTOR_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-conductor:v0.0.0}
+    container_name: saly-l3-conductor-1
+    command: ['op-conductor', '--config=/config/conductor-1.json']
+    ports:
+      - '${CONDUCTOR_1_PORT:-8555}:8545'
+    volumes:
+      - conductor_1_data:/data
+      - ./config:/config:ro
+    networks: [saly_l3_prod]
+
+  op-conductor-2:
+    <<: *hardening
+    image: ${OP_CONDUCTOR_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-conductor:v0.0.0}
+    container_name: saly-l3-conductor-2
+    command: ['op-conductor', '--config=/config/conductor-2.json']
+    ports:
+      - '${CONDUCTOR_2_PORT:-8556}:8545'
+    volumes:
+      - conductor_2_data:/data
+      - ./config:/config:ro
+    networks: [saly_l3_prod]
+
+  op-conductor-3:
+    <<: *hardening
+    image: ${OP_CONDUCTOR_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-conductor:v0.0.0}
+    container_name: saly-l3-conductor-3
+    command: ['op-conductor', '--config=/config/conductor-3.json']
+    ports:
+      - '${CONDUCTOR_3_PORT:-8557}:8545'
+    volumes:
+      - conductor_3_data:/data
+      - ./config:/config:ro
+    networks: [saly_l3_prod]
+
+  op-node-1:
+    <<: *hardening
+    image: ${OP_NODE_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2}
+    container_name: saly-l3-node-1
+    entrypoint: ['/bin/sh', '/config/op-node-ha-entrypoint.sh']
+    depends_on:
+      op-geth-sequencer:
+        condition: service_healthy
+    volumes:
+      - ./artifacts:/artifacts:ro
+      - ./config:/config:ro
+    environment:
+      L1_RPC_URL: ${L1_RPC_URL:?set L1_RPC_URL}
+      L3_SEQUENCER_PRIVATE_KEY: ${L3_SEQUENCER_PRIVATE_KEY:-}
+      CONDUCTOR_RPC: http://op-conductor-1:8545
+      NODE_INDEX: '1'
+    networks: [saly_l3_prod]
+
+  op-node-2:
+    <<: *hardening
+    image: ${OP_NODE_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2}
+    container_name: saly-l3-node-2
+    entrypoint: ['/bin/sh', '/config/op-node-ha-entrypoint.sh']
+    depends_on:
+      op-geth-replica-1:
+        condition: service_started
+    volumes:
+      - ./artifacts:/artifacts:ro
+      - ./config:/config:ro
+    environment:
+      L1_RPC_URL: ${L1_RPC_URL:?set L1_RPC_URL}
+      L3_SEQUENCER_PRIVATE_KEY: ${L3_SEQUENCER_PRIVATE_KEY:-}
+      CONDUCTOR_RPC: http://op-conductor-2:8545
+      NODE_INDEX: '2'
+    networks: [saly_l3_prod]
+
+  op-batcher:
+    <<: *hardening
+    image: ${OP_BATCHER_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.2}
+    container_name: saly-l3-batcher
+    entrypoint: ['/bin/sh', '/config/op-batcher-entrypoint.sh']
+    depends_on: [op-node-1]
+    environment:
+      L1_RPC_URL: ${L1_RPC_URL:?set L1_RPC_URL}
+      L3_BATCHER_PRIVATE_KEY: ${L3_BATCHER_PRIVATE_KEY:?set L3_BATCHER_PRIVATE_KEY}
+      DA_TYPE: ${L3_DA_TYPE:-calldata}
+    volumes:
+      - ./config:/config:ro
+    networks: [saly_l3_prod]
+
+  op-proposer:
+    <<: *hardening
+    image: ${OP_PROPOSER_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.11.2}
+    container_name: saly-l3-proposer
+    entrypoint: ['/bin/sh', '/config/op-proposer-fp-entrypoint.sh']
+    depends_on: [op-node-1]
+    environment:
+      L1_RPC_URL: ${L1_RPC_URL:?set L1_RPC_URL}
+      L3_PROPOSER_PRIVATE_KEY: ${L3_PROPOSER_PRIVATE_KEY:?set L3_PROPOSER_PRIVATE_KEY}
+      L3_DISPUTE_GAME_FACTORY: ${L3_DISPUTE_GAME_FACTORY:?set L3_DISPUTE_GAME_FACTORY}
+    volumes:
+      - ./config:/config:ro
+    networks: [saly_l3_prod]

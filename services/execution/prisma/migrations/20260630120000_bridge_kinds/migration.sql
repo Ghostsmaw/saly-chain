@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "ExecutionTransactionKind" ADD VALUE IF NOT EXISTS 'BRIDGE_DEPOSIT';
+ALTER TYPE "ExecutionTransactionKind" ADD VALUE IF NOT EXISTS 'BRIDGE_WITHDRAW';

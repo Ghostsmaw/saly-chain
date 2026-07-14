@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: intent_settlement_lineage
+    description: >
+      One row per intent stitching received → screened → routed → settlement.
+      The proprietary cross-chain payment lineage that defines the Saly moat.
+    columns:
+      - name: intent_id
+        description: Stable intent identifier (grain).
+        tests:
+          - not_null
+          - unique
+      - name: lineage_status
+        description: Terminal/most-advanced status of the intent.
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["received", "routed", "in_flight", "settled", "failed", "rejected"]
+
+  - name: rail_economics
+    description: Daily settlement economics per rail (volume, success, latency, cost).
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: rail
+        tests: [not_null]
+      - name: settle_success_rate
+        description: settled_intents / routed_intents for the day.
+
+  - name: agent_activity
+    description: Per-agent lifecycle + behavior summary.
+    columns:
+      - name: agent_id
+        tests:
+          - not_null
+          - unique
+
+  - name: token_flows_daily
+    description: Daily transfer volume and unique participants per chain + token.
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: chain_id
+        tests: [not_null]
+
+  - name: dim_addresses
+    description: Observed addresses with activity stats and optional human labels.
+    columns:
+      - name: address
+        tests: [not_null]

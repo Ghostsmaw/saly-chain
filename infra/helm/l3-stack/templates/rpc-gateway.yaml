@@ -1,0 +1,109 @@
+{{- $ := . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-l3-env
+  labels:
+    app.kubernetes.io/name: l3-stack
+data:
+  L3_NETWORK: {{ .Values.l3.network | quote }}
+  L3_SETTLEMENT_MODE: {{ .Values.l3.settlementMode | quote }}
+  L3_RPC_UPSTREAM_URLS: {{ .Values.rpcGateway.upstreamUrls | quote }}
+  L3_RPC_RATE_LIMIT_PER_MIN: {{ .Values.rpcGateway.rateLimitPerMin | quote }}
+---
+{{- if .Values.rpcGateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-rpc-gateway
+  labels:
+    app.kubernetes.io/name: l3-rpc-gateway
+spec:
+  replicas: {{ .Values.rpcGateway.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: l3-rpc-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: l3-rpc-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.rpcGateway.metricsPort | quote }}
+    spec:
+      containers:
+        - name: rpc-gateway
+          image: "{{ .Values.global.imageRegistry }}/worker-l3-rpc-gateway:{{ .Values.global.tag }}"
+          ports:
+            - name: rpc
+              containerPort: {{ .Values.rpcGateway.port }}
+            - name: metrics
+              containerPort: {{ .Values.rpcGateway.metricsPort }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-l3-env
+          env:
+            - name: L3_RPC_GATEWAY_PORT
+              value: {{ .Values.rpcGateway.port | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.rpcGateway.metricsPort | quote }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-rpc-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: l3-rpc-gateway
+  ports:
+    - name: rpc
+      port: {{ .Values.rpcGateway.port }}
+      targetPort: rpc
+    - name: metrics
+      port: {{ .Values.rpcGateway.metricsPort }}
+      targetPort: metrics
+{{- end }}
+---
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-l3-rpc
+  annotations:
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-rpc-gateway
+                port:
+                  number: {{ .Values.rpcGateway.port }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Release.Name }}-l3-rpc-tls
+  {{- end }}
+{{- end }}

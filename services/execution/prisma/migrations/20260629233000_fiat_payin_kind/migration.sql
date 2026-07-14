@@ -1,0 +1,1 @@
+ALTER TYPE "ExecutionTransactionKind" ADD VALUE IF NOT EXISTS 'FIAT_PAYIN';

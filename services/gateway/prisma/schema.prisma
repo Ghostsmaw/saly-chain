@@ -1,0 +1,64 @@
+// =============================================================================
+// SalyChain API Gateway — Prisma schema
+//
+// The gateway is largely stateless, but two surfaces must be durable:
+//
+//   IdempotencyRecord — caches the response of a mutating request keyed by
+//                       (api_key_id, idempotency_key). Replaying the same key
+//                       within the window returns the cached response. This is
+//                       the gateway-level safety net; downstream services also
+//                       enforce idempotency.
+//
+//   RequestLog        — append-only access log for partners (req method, path,
+//                       status, latency, scope). Surfaced in the developer
+//                       portal. We log at the gateway because downstream
+//                       services see the request post-auth — only the gateway
+//                       has the full picture.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model IdempotencyRecord {
+  /// `${apiKeyId}:${idempotencyKey}`.
+  id              String   @id @map("id")
+  apiKeyId        String   @map("api_key_id")
+  idempotencyKey  String   @map("idempotency_key")
+  method          String
+  path            String
+  /// hex SHA-256 of the request body (binds the response to the body shape).
+  requestHash     String   @map("request_hash")
+  responseStatus  Int      @map("response_status")
+  responseBody    String   @map("response_body")  // JSON-string
+  responseHeaders Json     @map("response_headers")
+  createdAt       DateTime @default(now()) @map("created_at")
+  expiresAt       DateTime @map("expires_at")
+
+  @@index([apiKeyId, expiresAt])
+  @@map("idempotency_records")
+}
+
+model RequestLog {
+  id            String   @id @map("id")
+  apiKeyId      String?  @map("api_key_id")
+  orgId         String?  @map("org_id")
+  method        String
+  path          String
+  status        Int
+  latencyMs     Int      @map("latency_ms")
+  ip            String?
+  userAgent     String?  @map("user_agent")
+  correlationId String   @map("correlation_id")
+  occurredAt    DateTime @default(now()) @map("occurred_at")
+
+  @@index([orgId, occurredAt])
+  @@index([apiKeyId, occurredAt])
+  @@map("request_logs")
+}

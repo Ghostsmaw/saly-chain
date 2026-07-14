@@ -1,0 +1,38 @@
+import {
+  ArrowLeftRight,
+  BookOpen,
+  Bot,
+  Brain,
+  GraduationCap,
+  HeartPulse,
+  Key,
+  Landmark,
+  LayoutDashboard,
+  Package,
+  Plane,
+  ScrollText,
+  Settings,
+  TrendingUp,
+  Webhook,
+  Wheat,
+} from 'lucide-react';
+import type { SidebarItem } from '@salychain/ui';
+
+export const navItems: readonly SidebarItem[] = [
+  { key: 'dashboard', label: 'Overview', href: '/', icon: LayoutDashboard },
+  { key: 'intents', label: 'Intents', href: '/intents', icon: Brain },
+  { key: 'transactions', label: 'Transactions', href: '/transactions', icon: ArrowLeftRight },
+  { key: 'verticals-finance', label: 'Finance', href: '/verticals/finance', icon: TrendingUp },
+  { key: 'verticals-gov', label: 'Government', href: '/verticals/gov', icon: Landmark },
+  { key: 'verticals-health', label: 'Healthcare', href: '/verticals/health', icon: HeartPulse },
+  { key: 'verticals-agents', label: 'Agent Marketplace', href: '/verticals/agents', icon: Bot },
+  { key: 'verticals-agri', label: 'Agriculture', href: '/verticals/agri', icon: Wheat },
+  { key: 'verticals-scm', label: 'Supply chain', href: '/verticals/scm', icon: Package },
+  { key: 'verticals-aviation', label: 'Aviation', href: '/verticals/aviation', icon: Plane },
+  { key: 'verticals-edu', label: 'Education', href: '/verticals/edu', icon: GraduationCap },
+  { key: 'keys', label: 'API Keys', href: '/api-keys', icon: Key },
+  { key: 'webhooks', label: 'Webhooks', href: '/webhooks', icon: Webhook },
+  { key: 'logs', label: 'Request Logs', href: '/logs', icon: ScrollText },
+  { key: 'docs', label: 'Docs', href: '/docs', icon: BookOpen },
+  { key: 'settings', label: 'Settings', href: '/settings', icon: Settings },
+];

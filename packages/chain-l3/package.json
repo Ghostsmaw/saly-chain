@@ -1,0 +1,38 @@
+{
+  "name": "@salychain/chain-l3",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SalyChain L3 (OP-Stack) network registry and settlement-layer rollup monitor",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "verify-spike": "pnpm run build && node dist/cli/verify-spike.js",
+    "verify-production": "pnpm run build && node dist/cli/verify-production.js",
+    "verify-stablecoin": "pnpm run build && node dist/cli/verify-stablecoin.js",
+    "verify-governance": "pnpm run build && node dist/cli/verify-governance.js",
+    "verify-verticals": "pnpm run build && node dist/cli/verify-verticals.js",
+    "verify-milestone-e": "pnpm run build && node dist/cli/verify-milestone-e.js",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@salychain/errors": "workspace:*",
+    "@salychain/logger": "workspace:*",
+    "viem": "^2.21.19"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}

@@ -1,0 +1,128 @@
+// =============================================================================
+// SalyChain API Keys Service — Prisma schema
+//
+// Models:
+//
+//   Organization      — the partner / customer entity. Owns API keys, members,
+//                       webhook subscriptions, usage limits, billing posture.
+//   Member            — humans bound to an org (linked to Auth at a higher layer).
+//   ApiKey            — issued credential. We store only a per-key salt + an
+//                       Argon2-class hash of (secret + pepper + salt). The full
+//                       secret is returned ONCE at issue time and never again.
+//   ApiKeyEvent       — append-only audit trail: issued / used / rotated / revoked.
+//
+// Scopes are coarse-grained, prefix-based ('intents:write', 'tx:read', etc).
+// Fine-grained policy lives in the gateway / call-site, not here.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum Environment {
+  TEST /// keys prefixed sk_test_…  — bound to testnet rails only
+  LIVE /// keys prefixed sk_live_…  — touches real money
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum ApiKeyEventKind {
+  ISSUED
+  USED
+  ROTATED
+  REVOKED
+}
+
+model Organization {
+  id                     String    @id @map("id")
+  name                   String
+  status                 OrgStatus @default(ACTIVE)
+  defaultRateLimitPerMin Int       @default(600) @map("default_rate_limit_per_min")
+  metadata               Json?
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  members Member[]
+  apiKeys ApiKey[]
+
+  @@map("organizations")
+}
+
+model Member {
+  id        String   @id @map("id")
+  orgId     String   @map("org_id")
+  email     String
+  role      String   @default("member") /// 'owner' | 'admin' | 'member' | 'viewer'
+  createdAt DateTime @default(now()) @map("created_at")
+
+  org Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, email])
+  @@map("members")
+}
+
+model ApiKey {
+  id              String       @id @map("id")
+  orgId           String       @map("org_id")
+  /// The non-secret prefix that allows O(1) lookup. Format: sk_{env}_{12}
+  /// e.g. sk_test_01HABCDXYZ012
+  prefix          String       @unique
+  /// Hex-encoded random salt unique per key.
+  salt            String
+  /// Hex-encoded scrypt(secret || pepper, salt) hash. The full secret is shown
+  /// to the caller exactly once on issue and never persisted.
+  secretHash      String       @map("secret_hash")
+  /// Last 4 chars of the original secret, kept solely for UX ("…q9aF").
+  lastFour        String       @map("last_four")
+  environment     Environment  @default(TEST)
+  status          ApiKeyStatus @default(ACTIVE)
+  scopes          String[]     @default([])
+  rateLimitPerMin Int          @map("rate_limit_per_min")
+  description     String?
+  /// Optional CIDR allow-list. Empty array = any IP.
+  ipAllowList     String[]     @default([]) @map("ip_allow_list")
+  createdBy       String?      @map("created_by")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  lastUsedAt      DateTime?    @map("last_used_at")
+  expiresAt       DateTime?    @map("expires_at")
+  revokedAt       DateTime?    @map("revoked_at")
+  revokedReason   String?      @map("revoked_reason")
+
+  org    Organization  @relation(fields: [orgId], references: [id])
+  events ApiKeyEvent[]
+
+  @@index([orgId, status])
+  @@map("api_keys")
+}
+
+model ApiKeyEvent {
+  id            String          @id @map("id")
+  apiKeyId      String          @map("api_key_id")
+  kind          ApiKeyEventKind
+  ip            String?
+  userAgent     String?         @map("user_agent")
+  correlationId String?         @map("correlation_id")
+  metadata      Json?
+  occurredAt    DateTime        @default(now()) @map("occurred_at")
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id])
+
+  @@index([apiKeyId, occurredAt])
+  @@map("api_key_events")
+}

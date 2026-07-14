@@ -1,0 +1,29 @@
+# Dependencies / build output (rebuilt inside the image)
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/out
+
+# Local env & secrets — never bake into images
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+
+# VCS / editor / OS noise
+.git
+.gitignore
+**/.DS_Store
+**/*.log
+
+# Docs & infra that don't affect the build
+docs
+**/*.md
+!README.md
+
+# Foundry / contracts artifacts
+contracts/**/out
+contracts/**/cache
+contracts/**/broadcast

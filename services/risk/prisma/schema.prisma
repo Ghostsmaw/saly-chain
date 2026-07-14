@@ -1,0 +1,77 @@
+// =============================================================================
+// SalyChain Risk Service — Prisma schema
+//
+//   * `ActorProfile` is the rolling profile per actor (user / business / agent):
+//     historical baselines, current 24h windows, last-seen counters.
+//   * `RiskAssessment` is the immutable audit log of every score the service
+//     has produced, with the input snapshot.
+//   * `CounterpartyEdge` tracks per-actor-to-counterparty history (first-time
+//     transfers, repeat patterns).
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RiskDecision {
+  ALLOW
+  REVIEW
+  BLOCK
+}
+
+model ActorProfile {
+  externalRef       String   @id @map("external_ref")
+  /// Total observed in the rolling 24h window across all currencies, normalized to
+  /// USD-cents using the snapshot rate. Source of truth lives in `RiskAssessment`.
+  rolling24hUsdMinor BigInt  @default(0) @map("rolling_24h_usd_minor")
+  /// Rolling 24h transaction count.
+  rolling24hCount   Int      @default(0) @map("rolling_24h_count")
+  /// Lifetime tx count; informs "new user" boost.
+  lifetimeCount     Int      @default(0) @map("lifetime_count")
+  /// Mean ticket size in USD-cents (EMA).
+  meanTicketUsdMinor BigInt  @default(0) @map("mean_ticket_usd_minor")
+  /// Standard-deviation of ticket size in USD-cents (online EMA approximation).
+  stddevTicketUsdMinor BigInt @default(0) @map("stddev_ticket_usd_minor")
+  lastSeenAt        DateTime? @map("last_seen_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("actor_profiles")
+}
+
+model CounterpartyEdge {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorExternalRef  String   @map("actor_external_ref")
+  counterpartyRef   String   @map("counterparty_ref")
+  firstSeenAt       DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt        DateTime @updatedAt @map("last_seen_at")
+  txCount           Int      @default(0) @map("tx_count")
+  totalUsdMinor     BigInt   @default(0) @map("total_usd_minor")
+
+  @@unique([actorExternalRef, counterpartyRef])
+  @@map("counterparty_edges")
+}
+
+model RiskAssessment {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  intentId        String?      @map("intent_id")
+  transactionId   String?      @map("transaction_id")
+  actorExternalRef String      @map("actor_external_ref")
+  counterpartyRef String?      @map("counterparty_ref")
+  amountUsdMinor  BigInt       @map("amount_usd_minor")
+  /// Component scores (each 0..100) merged into the final score for transparency.
+  components      Json
+  finalScore      Int          @map("final_score")
+  decision        RiskDecision
+  reasons         String[]
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  @@index([actorExternalRef, createdAt])
+  @@index([decision, createdAt])
+  @@map("risk_assessments")
+}

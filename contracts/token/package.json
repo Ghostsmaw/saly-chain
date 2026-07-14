@@ -1,0 +1,15 @@
+{
+  "name": "@salychain/contracts-token",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SalyChain $SALY utility token + staking (Foundry / Solidity 0.8.24)",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test -vvv",
+    "fmt": "forge fmt",
+    "snapshot": "forge snapshot",
+    "deploy:base-sepolia": "forge script script/Deploy.s.sol --rpc-url base-sepolia --broadcast --verify",
+    "typecheck": "echo 'no-op (solidity workspace)'",
+    "clean": "rm -rf out cache broadcast .turbo"
+  }
+}

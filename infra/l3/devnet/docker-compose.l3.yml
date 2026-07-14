@@ -1,0 +1,127 @@
+# SalyChain L3 — OP-Stack devnet (settlement = Base Sepolia)
+#
+# Long-running sequencer stack: op-geth (execution) + op-node (rollup driver /
+# sequencer) + op-batcher (DA) + op-proposer (settlement output roots).
+#
+# Artifacts (genesis.json, rollup.json, jwt.txt) are produced by `scripts/deploy.sh`
+# (op-deployer) into ./artifacts before this stack starts. Secrets (batcher/proposer/
+# sequencer keys, L1 RPC) come from the gitignored `.env` in this directory — never
+# hardcode them here. Bring the whole thing up with `scripts/up.sh`.
+#
+# Image tags are pinned but overridable via .env so operators can move in lockstep
+# with a chosen Optimism release.
+
+name: saly-l3-devnet
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt:
+    - 'no-new-privileges:true'
+  cap_drop:
+    - ALL
+  logging: *default-logging
+
+networks:
+  saly_l3:
+    name: saly_l3
+    driver: bridge
+
+volumes:
+  l3_geth_data:
+    name: saly_l3_geth_data
+
+services:
+  op-geth:
+    <<: *hardening
+    image: ${OP_GETH_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101411.4}
+    container_name: saly-l3-geth
+    entrypoint: ['/bin/sh', '/config/op-geth-entrypoint.sh']
+    ports:
+      - '${L3_GETH_HTTP_PORT:-9545}:8545' # JSON-RPC (op-geth) → L3_L3_RPC_URL
+      - '${L3_GETH_WS_PORT:-9546}:8546' # WebSocket
+    volumes:
+      - l3_geth_data:/data
+      - ./artifacts:/artifacts:ro
+      - ./config:/config:ro
+    environment:
+      GETH_DATADIR: /data
+      GETH_GENESIS: /artifacts/genesis.json
+      GETH_JWT: /artifacts/jwt.txt
+      L2_CHAIN_ID: ${L2_CHAIN_ID:-845320001}
+      SEQUENCER_HTTP: ${SEQUENCER_HTTP:-http://op-node:8547}
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          "geth attach --exec 'eth.blockNumber' /data/geth.ipc >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    networks: [saly_l3]
+    mem_limit: ${L3_GETH_MEM_LIMIT:-2g}
+    cpus: ${L3_GETH_CPUS:-2}
+
+  op-node:
+    <<: *hardening
+    image: ${OP_NODE_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2}
+    container_name: saly-l3-node
+    depends_on:
+      op-geth:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '/config/op-node-entrypoint.sh']
+    ports:
+      - '${L3_NODE_RPC_PORT:-9547}:8547' # rollup node RPC (optimism_syncStatus)
+    volumes:
+      - ./artifacts:/artifacts:ro
+      - ./config:/config:ro
+    environment:
+      L1_RPC_URL: ${L1_RPC_URL:?set L1_RPC_URL in infra/l3/devnet/.env}
+      L1_BEACON_RPC_URL: ${L1_BEACON_RPC_URL:-}
+      L1_RPC_KIND: ${L1_RPC_KIND:-standard}
+      L3_SEQUENCER_PRIVATE_KEY: ${L3_SEQUENCER_PRIVATE_KEY:-}
+      SEQUENCER_L1_CONFS: ${SEQUENCER_L1_CONFS:-4}
+    networks: [saly_l3]
+    mem_limit: ${L3_NODE_MEM_LIMIT:-1g}
+    cpus: ${L3_NODE_CPUS:-1}
+
+  op-batcher:
+    <<: *hardening
+    image: ${OP_BATCHER_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.2}
+    container_name: saly-l3-batcher
+    depends_on:
+      op-node:
+        condition: service_started
+      op-geth:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '/config/op-batcher-entrypoint.sh']
+    environment:
+      L1_RPC_URL: ${L1_RPC_URL:?set L1_RPC_URL in infra/l3/devnet/.env}
+      L3_BATCHER_PRIVATE_KEY: ${L3_BATCHER_PRIVATE_KEY:?set L3_BATCHER_PRIVATE_KEY in infra/l3/devnet/.env}
+      DA_TYPE: ${L3_DA_TYPE:-calldata}
+    networks: [saly_l3]
+    mem_limit: ${L3_BATCHER_MEM_LIMIT:-512m}
+    cpus: ${L3_BATCHER_CPUS:-1}
+
+  op-proposer:
+    <<: *hardening
+    image: ${OP_PROPOSER_IMAGE:-us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.11.2}
+    container_name: saly-l3-proposer
+    depends_on:
+      op-node:
+        condition: service_started
+    entrypoint: ['/bin/sh', '/config/op-proposer-entrypoint.sh']
+    environment:
+      L1_RPC_URL: ${L1_RPC_URL:?set L1_RPC_URL in infra/l3/devnet/.env}
+      L3_PROPOSER_PRIVATE_KEY: ${L3_PROPOSER_PRIVATE_KEY:?set L3_PROPOSER_PRIVATE_KEY in infra/l3/devnet/.env}
+      L3_L2_OUTPUT_ORACLE: ${L3_L2_OUTPUT_ORACLE:?set L3_L2_OUTPUT_ORACLE (from scripts/deploy.sh)}
+    networks: [saly_l3]
+    mem_limit: ${L3_PROPOSER_MEM_LIMIT:-512m}
+    cpus: ${L3_PROPOSER_CPUS:-1}

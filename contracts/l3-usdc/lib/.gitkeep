@@ -1,0 +1,2 @@
+# Vendored via symlink to `contracts/l3-usdc/lib` (same OZ + forge-std versions).
+# CI: `ln -sf ../l3-usdc/lib lib` before `forge test`.

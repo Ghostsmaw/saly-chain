@@ -1,0 +1,152 @@
+// =============================================================================
+// SalyChain Intelligence Service — Prisma schema (B8)
+//
+// Saly Intelligence is the AI layer over the analytics datasets. It persists:
+//
+//   Entity         — a resolved cluster of addresses believed to belong to one
+//                    real-world actor, with a derived label/category, an entity
+//                    risk score, and a sanctioned flag.
+//   EntityMember   — an (chain, address) belonging to an Entity, with the
+//                    activity counters that justified the link.
+//   ResolutionRun  — one entity-resolution batch (clustering pass) with counts.
+//   AddressEmbedding — a vector embedding for an address (deterministic local
+//                    embedder by default), used for similarity search.
+//   NlQuery        — an audit log of natural-language analytics questions, the
+//                    semantic-layer plan they compiled to, and the outcome.
+//
+// ClickHouse holds the raw activity; this Postgres DB holds the *derived
+// intelligence* (clusters, embeddings, query logs) that the rest of the platform
+// (notably services/risk) consumes.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EntityStatus {
+  ACTIVE
+  MERGED /// folded into another entity by a later run
+}
+
+enum ResolutionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum RunTrigger {
+  MANUAL
+  SCHEDULE
+}
+
+enum NlQueryStatus {
+  PLANNED /// mapped to a plan but not executed
+  EXECUTED /// plan executed against the semantic layer
+  UNSUPPORTED /// could not be mapped to an allowlisted metric
+  FAILED /// execution error
+}
+
+model Entity {
+  id       String       @id @map("id")
+  /// Primary chain for the cluster (clusters are per-chain in the MVP).
+  chain    String
+  label    String?
+  category String?
+  status   EntityStatus @default(ACTIVE)
+
+  addressCount Int     @default(0) @map("address_count")
+  /// Derived entity risk score (0..100) consumed by services/risk.
+  riskScore    Int     @default(0) @map("risk_score")
+  sanctioned   Boolean @default(false)
+
+  firstSeenAt DateTime? @map("first_seen_at")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  resolvedAt  DateTime  @default(now()) @map("resolved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members EntityMember[]
+
+  @@index([chain, status])
+  @@index([sanctioned])
+  @@map("entities")
+}
+
+model EntityMember {
+  id       String @id @map("id")
+  entityId String @map("entity_id")
+  chain    String
+  address  String
+
+  transferEvents Int      @default(0) @map("transfer_events")
+  label          String?
+  addedAt        DateTime @default(now()) @map("added_at")
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([chain, address])
+  @@index([entityId])
+  @@map("entity_members")
+}
+
+model ResolutionRun {
+  id           String           @id @map("id")
+  status       ResolutionStatus @default(PENDING)
+  trigger      RunTrigger       @default(MANUAL)
+  chain        String?
+  lookbackDays Int              @map("lookback_days")
+
+  addressCount Int? @map("address_count")
+  entityCount  Int? @map("entity_count")
+  linkCount    Int? @map("link_count")
+
+  durationMs Int?    @map("duration_ms")
+  error      String?
+
+  startedAt  DateTime? @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("resolution_runs")
+}
+
+model AddressEmbedding {
+  id      String @id @map("id")
+  chain   String
+  address String
+  dim     Int
+  /// Float[] embedding stored as JSON (no pgvector dependency in the MVP).
+  vector  Json
+  model   String
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([chain, address])
+  @@map("address_embeddings")
+}
+
+model NlQuery {
+  id        String        @id @map("id")
+  orgId     String?       @map("org_id")
+  question  String
+  status    NlQueryStatus
+  metric    String?
+  plan      Json
+  rowCount  Int?          @map("row_count")
+  latencyMs Int?          @map("latency_ms")
+  error     String?
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt])
+  @@map("nl_queries")
+}

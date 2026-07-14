@@ -1,0 +1,125 @@
+// =============================================================================
+// SalyChain Datashares Service — Prisma schema (B7)
+//
+// Saly Datashares lets a partner subscribe to a *curated, governed* dataset and
+// have it materialized on a schedule into a destination they control — an object
+// store (S3/MinIO) today, warehouse-native shares (Snowflake/BigQuery/Databricks)
+// when enabled. Two models:
+//
+//   Datashare  — an org's subscription to a named curated dataset, with the
+//                dataset parameters, an access/redaction policy (column
+//                masking/drop/hash + row filters), a destination + its config,
+//                an output format, and an optional cron schedule.
+//   ShareRun   — one materialization of a datashare: query → policy → serialize
+//                → export. Append-only audit trail with row/byte counts, the
+//                resulting object location, and timing/error metadata.
+//
+// Unlike Datastreams (push, at-least-once, per-event), Datashares is pull/batch:
+// each run produces a single governed extract. Runs are idempotent per run id;
+// a scheduled run for a period can be re-driven safely (it overwrites its own
+// object key namespace).
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DatashareStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum DatashareDestination {
+  S3         /// object-store drop (CSV/JSON/Parquet) — implemented
+  SNOWFLAKE  /// Snowflake Secure Share — config-validated, requires driver+creds
+  BIGQUERY   /// BigQuery Analytics Hub — config-validated, requires driver+creds
+  DATABRICKS /// Databricks Delta Share — config-validated, requires driver+creds
+}
+
+enum DatashareFormat {
+  CSV
+  JSON
+  PARQUET
+}
+
+enum ShareRunStatus {
+  PENDING  /// queued, not yet started
+  RUNNING  /// worker is materializing
+  SUCCEEDED
+  FAILED
+}
+
+enum RunTrigger {
+  MANUAL   /// operator/API triggered a one-off run
+  SCHEDULE /// produced by the cron job scheduler
+}
+
+model Datashare {
+  id          String          @id @map("id")
+  orgId       String          @map("org_id")
+  name        String
+  description String?
+  status      DatashareStatus @default(ACTIVE)
+
+  /// Curated dataset id (allowlisted in named-datasets.ts).
+  datasetId String @map("dataset_id")
+  /// Validated dataset parameters (e.g. chain, lookback days, limit).
+  params Json @default("{}")
+  /// Access/redaction policy (validated by the AccessPolicy zod schema).
+  policy Json @default("{}")
+
+  destination       DatashareDestination @default(S3)
+  /// Destination connection config (bucket/prefix, or warehouse coordinates).
+  destinationConfig Json                 @default("{}") @map("destination_config")
+  format            DatashareFormat      @default(JSON)
+
+  /// Optional cron pattern (e.g. "0 * * * *"). Null ⇒ manual-only.
+  schedule String?
+
+  // ── Stats / health ────────────────────────────────────────────────────────
+  runCount      BigInt          @default(0) @map("run_count")
+  lastRunAt     DateTime?       @map("last_run_at")
+  lastSuccessAt DateTime?       @map("last_success_at")
+  lastRunStatus ShareRunStatus? @map("last_run_status")
+  lastRowCount  Int?            @map("last_row_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  runs ShareRun[]
+
+  @@index([orgId, status])
+  @@index([status, schedule])
+  @@map("datashares")
+}
+
+model ShareRun {
+  id      String         @id @map("id")
+  shareId String         @map("share_id")
+  status  ShareRunStatus @default(PENDING)
+  trigger RunTrigger     @default(MANUAL)
+
+  rowCount    Int?    @map("row_count")
+  byteCount   Int?    @map("byte_count")
+  /// Resulting object URI (s3://…) or warehouse share reference.
+  location    String?
+  format      DatashareFormat
+  durationMs  Int?    @map("duration_ms")
+  error       String?
+
+  startedAt  DateTime? @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  share Datashare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  @@index([shareId, createdAt])
+  @@index([status])
+  @@map("share_runs")
+}

@@ -1,0 +1,12 @@
+{
+  "paused": false,
+  "node": { "rpc": "http://op-node-1:8547" },
+  "execution": { "rpc": "http://op-geth-sequencer:8551", "jwt": "/artifacts/jwt.txt" },
+  "healthcheck": { "interval": 5000000000 },
+  "raft": {
+    "server_id": "conductor-1",
+    "storage_dir": "/data/raft",
+    "bind_addr": "0.0.0.0:50050",
+    "bootstrap": true
+  }
+}

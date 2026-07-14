@@ -1,0 +1,6 @@
+apiVersion: v2
+name: l3-stack
+description: SalyChain L3 OP-Stack production HA (Conductor + replicas + RPC gateway)
+type: application
+version: 0.1.0
+appVersion: "1.0"

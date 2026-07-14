@@ -1,0 +1,132 @@
+// =============================================================================
+// SalyChain Stablecoin Service — Prisma schema (Milestone D5)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StablecoinChain {
+  SALY_L3
+  BASE
+}
+
+enum MintRequestStatus {
+  PENDING
+  APPROVED
+  MINTING
+  COMPLETED
+  REJECTED
+  FAILED
+}
+
+enum RedeemRequestStatus {
+  PENDING
+  APPROVED
+  BURNING
+  PAYOUT
+  COMPLETED
+  REJECTED
+  FAILED
+}
+
+model ReserveAccount {
+  id                     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  custodian              String
+  currency               String          @default("SALYSD")
+  balanceMinor           BigInt          @map("balance_minor")
+  authorizedCeilingMinor BigInt          @map("authorized_ceiling_minor")
+  attestationHash        String?         @map("attestation_hash")
+  attestationUrl         String?         @map("attestation_url")
+  asOf                   DateTime?       @map("as_of")
+  chain                  StablecoinChain @default(SALY_L3)
+  metadata               Json?
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @updatedAt @map("updated_at")
+
+  mintRequests MintRequest[]
+
+  @@index([chain, custodian])
+  @@map("reserve_accounts")
+}
+
+model MintRequest {
+  id                     String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId                  String            @map("org_id")
+  idempotencyKey         String            @unique @map("idempotency_key")
+  status                 MintRequestStatus @default(PENDING)
+  amountMinor            BigInt            @map("amount_minor")
+  currency               String            @default("SALYSD")
+  chain                  StablecoinChain   @default(SALY_L3)
+  reserveAccountId       String            @map("reserve_account_id") @db.Uuid
+  destinationWalletId    String?           @map("destination_wallet_id")
+  destinationAddress     String?           @map("destination_address")
+  executionTransactionId String?           @map("execution_transaction_id")
+  txHash                 String?           @map("tx_hash")
+  ledgerEntryId          String?           @map("ledger_entry_id")
+  failureReason          String?           @map("failure_reason")
+  metadata               Json?
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
+
+  reserveAccount ReserveAccount @relation(fields: [reserveAccountId], references: [id])
+
+  @@index([orgId, createdAt])
+  @@index([status])
+  @@map("mint_requests")
+}
+
+model RedeemRequest {
+  id                     String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId                  String              @map("org_id")
+  idempotencyKey         String              @unique @map("idempotency_key")
+  status                 RedeemRequestStatus @default(PENDING)
+  amountMinor            BigInt              @map("amount_minor")
+  currency               String              @default("SALYSD")
+  chain                  StablecoinChain     @default(SALY_L3)
+  sourceWalletId         String              @map("source_wallet_id")
+  payoutRail             String              @map("payout_rail")
+  executionTransactionId String?             @map("execution_transaction_id")
+  txHash                 String?             @map("tx_hash")
+  ledgerEntryId          String?             @map("ledger_entry_id")
+  failureReason          String?             @map("failure_reason")
+  metadata               Json?
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
+
+  @@index([orgId, createdAt])
+  @@index([status])
+  @@map("redeem_requests")
+}
+
+model SupplySnapshot {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  chain              StablecoinChain
+  onChainSupplyMinor BigInt          @map("on_chain_supply_minor")
+  reserveTotalMinor  BigInt          @map("reserve_total_minor")
+  reserveRatioBps    Int             @map("reserve_ratio_bps")
+  capturedAt         DateTime        @default(now()) @map("captured_at")
+
+  @@index([chain, capturedAt])
+  @@map("supply_snapshots")
+}
+
+model ReserveAttestation {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reserveAccountId       String   @map("reserve_account_id") @db.Uuid
+  attestationHash        String   @map("attestation_hash")
+  balanceMinor           BigInt   @map("balance_minor")
+  authorizedCeilingMinor BigInt   @map("authorized_ceiling_minor")
+  attestationUrl         String?  @map("attestation_url")
+  asOf                   DateTime @map("as_of")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  @@index([reserveAccountId, asOf])
+  @@map("reserve_attestations")
+}

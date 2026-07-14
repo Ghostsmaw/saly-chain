@@ -1,0 +1,28 @@
+{
+  "name": "@salychain/worker-l3-rpc-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rate-limited public JSON-RPC gateway for Saly L3 read replicas",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@salychain/chain-l3": "workspace:*",
+    "@salychain/config": "workspace:*",
+    "@salychain/logger": "workspace:*",
+    "@salychain/observability": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}

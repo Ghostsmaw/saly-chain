@@ -1,0 +1,1 @@
+ALTER TYPE "ExecutionTransactionKind" ADD VALUE IF NOT EXISTS 'DEX_SWAP';

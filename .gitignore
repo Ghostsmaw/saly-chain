@@ -1,0 +1,56 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build outputs
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+.l3-monitor/
+infra/l3/devnet/deployments.base-sepolia.json
+infra/l3/devnet/artifacts/
+*.pem
+*.key
+!packages/*/.env.example
+!services/*/.env.example
+!apps/*/.env.example
+
+# logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# coverage
+coverage/
+.nyc_output/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.cursor/
+*.swp
+.DS_Store
+
+# misc
+.cache/
+tmp/
+temp/
+
+# hardhat
+artifacts/
+cache/
+typechain-types/
+
+# docker volumes (committed compose only)
+infra/docker/data/

@@ -1,0 +1,29 @@
+# Staging overrides — smaller footprint, debug logging, ingress on.
+global:
+  image:
+    tag: staging
+  sharedEnv:
+    NODE_ENV: staging
+    LOG_LEVEL: debug
+    NATS_URL: nats://nats:4222
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+
+defaults:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  apiHost: api.staging.salychain.io
+
+apps:
+  - { name: portal, port: 3000, host: portal.staging.salychain.io }
+  - { name: admin, port: 3000, host: admin.staging.salychain.io }
+  - { name: business, port: 3000, host: business.staging.salychain.io }

@@ -1,0 +1,38 @@
+/**
+ * Saly Design System — Intelligent Infrastructure
+ * Dark-first, monochrome, accent purple only for focus & brand moments.
+ */
+
+:root {
+  --saly-bg-primary: #07070a;
+  --saly-bg-secondary: #0e1015;
+  --saly-bg-card: #11131a;
+  --saly-bg-elevated: #161820;
+  --saly-bg-hover: #1a1d26;
+
+  --saly-border: rgba(255, 255, 255, 0.08);
+  --saly-border-strong: rgba(255, 255, 255, 0.12);
+
+  --saly-text-primary: #fafafa;
+  --saly-text-secondary: #a1a1aa;
+  --saly-text-muted: #71717a;
+  --saly-text-faint: #52525b;
+
+  --saly-accent: #7c3aed;
+  --saly-accent-muted: rgba(124, 58, 237, 0.12);
+
+  --saly-success: #22c55e;
+  --saly-warning: #eab308;
+  --saly-danger: #ef4444;
+  --saly-info: #3b82f6;
+
+  --saly-radius-sm: 6px;
+  --saly-radius-md: 8px;
+  --saly-radius-lg: 10px;
+
+  --saly-sidebar-width: 15.5rem;
+  --saly-topbar-height: 3.25rem;
+
+  --saly-font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --saly-font-mono: 'SF Mono', ui-monospace, 'Cascadia Code', monospace;
+}

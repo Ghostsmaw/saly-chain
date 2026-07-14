@@ -1,0 +1,27 @@
+// Fiat listener — webhook idempotency ledger (one row per PSP event).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model FiatWebhookEvent {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider        String
+  externalEventId String   @map("external_event_id")
+  txId            String   @map("tx_id")
+  pspId           String   @map("psp_id")
+  outcome         String
+  payload         Json
+  processedAt     DateTime @default(now()) @map("processed_at")
+  executionResult Json?    @map("execution_result")
+
+  @@unique([provider, externalEventId])
+  @@index([txId])
+  @@map("fiat_webhook_events")
+}

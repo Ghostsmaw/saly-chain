@@ -1,0 +1,16 @@
+# Copy to ~/.dbt/profiles.yml (or set DBT_PROFILES_DIR to this folder) and adjust.
+# Requires the dbt-clickhouse adapter:  pip install dbt-clickhouse
+saly_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: clickhouse
+      driver: http
+      host: localhost
+      port: 8123
+      user: salychain
+      password: salychain
+      schema: salychain_analytics
+      secure: false
+      connect_timeout: 10
+      send_receive_timeout: 300

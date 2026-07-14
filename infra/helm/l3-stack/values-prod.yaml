@@ -1,0 +1,8 @@
+rpcGateway:
+  replicas: 4
+  rateLimitPerMin: 1200
+
+ingress:
+  enabled: true
+  host: l3-rpc.salychain.io
+  tls: true

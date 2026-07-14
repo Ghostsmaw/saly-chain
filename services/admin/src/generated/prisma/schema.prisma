@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model PlatformSettings {
+  id                String   @id @default("default")
+  orgName           String   @map("org_name")
+  supportEmail      String   @map("support_email")
+  region            String
+  enforceMfa        Boolean  @default(true) @map("enforce_mfa")
+  ipAllowlist       Boolean  @default(false) @map("ip_allowlist")
+  ssoEnabled        Boolean  @default(true) @map("sso_enabled")
+  sessionTimeout    Boolean  @default(true) @map("session_timeout")
+  notifyRisk        Boolean  @default(true) @map("notify_risk")
+  notifySettlements Boolean  @default(true) @map("notify_settlements")
+  notifyDigest      Boolean  @default(false) @map("notify_digest")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+model AdminMember {
+  id           String   @id
+  name         String
+  email        String   @unique
+  roleName     String   @map("role_name")
+  mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
+  lastActiveAt DateTime @map("last_active_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("admin_members")
+}
+
+enum RoleTone {
+  BRAND
+  SUCCESS
+  WARNING
+  DANGER
+}
+
+model RbacRole {
+  id          String   @id
+  name        String   @unique
+  memberCount Int      @default(0) @map("member_count")
+  permissions Json
+  tone        RoleTone @default(BRAND)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("rbac_roles")
+}
+
+model FeatureFlag {
+  id          String   @id
+  key         String   @unique
+  name        String
+  description String
+  enabled     Boolean  @default(false)
+  scope       String
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("feature_flags")
+}
+
+enum AuditTone {
+  BRAND
+  SUCCESS
+  WARNING
+  DANGER
+  NEUTRAL
+}
+
+enum VerificationCategory {
+  KYB
+  KYC
+}
+
+enum RequirementInputType {
+  DOCUMENT
+  INFORMATION
+}
+
+model VerificationRequirement {
+  id              String               @id
+  slug            String               @unique
+  label           String
+  description     String               @default("")
+  category        VerificationCategory
+  inputType       RequirementInputType @map("input_type")
+  fieldKey        String               @map("field_key")
+  stepKey         String               @map("step_key")
+  valueFormat     String?              @map("value_format")
+  placeholder     String?
+  accept          String?
+  sortOrder       Int                  @default(0) @map("sort_order")
+  targetBusiness  Boolean              @default(false) @map("target_business")
+  targetDeveloper Boolean              @default(false) @map("target_developer")
+  isActive        Boolean              @default(false) @map("is_active")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  @@map("verification_requirements")
+}
+
+model AuditEntry {
+  id        String    @id
+  actor     String
+  action    String
+  target    String
+  tone      AuditTone @default(NEUTRAL)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_entries")
+}

@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model EventOutbox {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String       @unique @map("event_id")
+  subject     String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  publishedAt DateTime?    @map("published_at")
+
+  @@index([status, createdAt])
+  @@map("event_outbox")
+}
+
+enum AgentStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum OwnerKind {
+  USER
+  BUSINESS
+}
+
+enum SpendApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum AgentServiceStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+enum AgentInvoiceStatus {
+  OPEN
+  PAID
+  VOID
+}
+
+model Agent {
+  id        String      @id @map("id")
+  ownerId   String      @map("owner_id")
+  ownerKind OwnerKind   @map("owner_kind")
+  orgId     String?     @map("org_id")
+  name      String
+  status    AgentStatus @default(ACTIVE)
+  metadata  Json?
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  policy           AgentSpendingPolicy?
+  reasoningLogs    AgentReasoningLog[]
+  approvalRequests SpendApprovalRequest[]
+  invoices         AgentInvoice[]
+  services         AgentService[]
+
+  @@index([ownerId, status])
+  @@index([orgId])
+  @@map("agents")
+}
+
+model AgentSpendingPolicy {
+  id                     String   @id @default(uuid()) @db.Uuid
+  agentId                String   @unique @map("agent_id")
+  perTxCapMinor          BigInt   @map("per_tx_cap_minor")
+  dailyCapMinor          BigInt   @map("daily_cap_minor")
+  monthlyCapMinor        BigInt?  @map("monthly_cap_minor")
+  destinationAllowlist   Json     @map("destination_allowlist")
+  approvalThresholdMinor BigInt   @map("approval_threshold_minor")
+  requiredApprovers      Int      @default(0) @map("required_approvers")
+  currency               String   @default("USD") @db.VarChar(8)
+  version                Int      @default(1)
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("agent_spending_policies")
+}
+
+model AgentReasoningLog {
+  id        String   @id @map("id")
+  agentId   String   @map("agent_id")
+  intentId  String?  @map("intent_id")
+  traceId   String?  @map("trace_id")
+  summary   String
+  steps     Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, createdAt])
+  @@index([intentId])
+  @@map("agent_reasoning_logs")
+}
+
+model SpendApprovalRequest {
+  id                String              @id @map("id")
+  agentId           String              @map("agent_id")
+  intentId          String?             @map("intent_id")
+  amountMinor       BigInt              @map("amount_minor")
+  destination       String
+  approvalCount     Int                 @default(0) @map("approval_count")
+  requiredApprovers Int                 @map("required_approvers")
+  status            SpendApprovalStatus @default(PENDING)
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  agent Agent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  votes SpendApprovalVote[]
+
+  @@index([agentId, status])
+  @@index([intentId])
+  @@map("spend_approval_requests")
+}
+
+model SpendApprovalVote {
+  id         String   @id @map("id")
+  requestId  String   @map("request_id")
+  approverId String   @map("approver_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  request SpendApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, approverId])
+  @@map("spend_approval_votes")
+}
+
+model AgentService {
+  id          String             @id @map("id")
+  agentId     String             @map("agent_id")
+  name        String
+  description String?
+  priceMinor  BigInt             @map("price_minor")
+  currency    String             @default("USD") @db.VarChar(8)
+  capability  Json?
+  status      AgentServiceStatus @default(ACTIVE)
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  agent         Agent                     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  subscriptions AgentSubscription[]
+  listings      AgentMarketplaceListing[]
+
+  @@index([agentId, status])
+  @@map("agent_services")
+}
+
+model AgentSubscription {
+  id                String             @id @map("id")
+  serviceId         String             @map("service_id")
+  subscriberAgentId String             @map("subscriber_agent_id")
+  status            SubscriptionStatus @default(ACTIVE)
+  renewAt           DateTime?          @map("renew_at")
+  intentId          String?            @map("intent_id")
+  createdAt         DateTime           @default(now()) @map("created_at")
+
+  service AgentService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([subscriberAgentId, status])
+  @@map("agent_subscriptions")
+}
+
+model AgentMarketplaceListing {
+  id        String   @id @map("id")
+  serviceId String   @map("service_id")
+  tags      Json?
+  ratingBps Int?     @map("rating_bps")
+  visible   Boolean  @default(true)
+  onChainId String?  @map("on_chain_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  service AgentService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([visible])
+  @@map("agent_marketplace_listings")
+}
+
+model AgentInvoice {
+  id           String             @id @map("id")
+  agentId      String             @map("agent_id")
+  payerAgentId String             @map("payer_agent_id")
+  amountMinor  BigInt             @map("amount_minor")
+  currency     String             @db.VarChar(8)
+  status       AgentInvoiceStatus @default(OPEN)
+  intentId     String?            @map("intent_id")
+  memo         String?
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, status])
+  @@map("agent_invoices")
+}
+
+model UsageMeter {
+  id          String   @id @map("id")
+  agentId     String   @map("agent_id")
+  serviceId   String?  @map("service_id")
+  units       BigInt
+  amountMinor BigInt   @map("amount_minor")
+  currency    String   @db.VarChar(8)
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+  settled     Boolean  @default(false)
+  intentId    String?  @map("intent_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([agentId, settled])
+  @@map("usage_meters")
+}

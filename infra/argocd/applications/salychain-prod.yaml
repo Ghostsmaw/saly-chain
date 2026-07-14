@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: salychain-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: salychain
+  source:
+    repoURL: https://github.com/salychain/salychain.git
+    # Pin prod to a release tag; promote by bumping this revision.
+    targetRevision: main
+    path: infra/helm/salychain
+    helm:
+      releaseName: salychain
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: salychain-prod
+  syncPolicy:
+    # Prod stays manual-sync by default: ArgoCD shows drift, a human promotes.
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

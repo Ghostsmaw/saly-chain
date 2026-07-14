@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model EventOutbox {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String       @unique @map("event_id")
+  subject     String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  publishedAt DateTime?    @map("published_at")
+
+  @@index([status, createdAt])
+  @@map("event_outbox")
+}
+
+enum InstrumentType {
+  BOND
+  FUND
+  RWA
+}
+
+enum LoanStatus {
+  ACTIVE
+  REPAID
+  DEFAULTED
+  CANCELLED
+}
+
+enum CashflowType {
+  COUPON
+  DIVIDEND
+  REDEMPTION
+}
+
+enum DvpStatus {
+  PENDING
+  ESCROW_FUNDED
+  SETTLED
+  CANCELLED
+}
+
+model Instrument {
+  id        String         @id @map("id")
+  orgId     String         @map("org_id")
+  type      InstrumentType
+  name      String
+  issuerRef String         @map("issuer_ref")
+  currency  String         @db.VarChar(8)
+  terms     Json?
+  tokenId   String?        @map("token_id")
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  holdings  Holding[]
+  cashflows Cashflow[]
+  loans     Loan[]
+
+  @@index([orgId])
+  @@map("instruments")
+}
+
+model Holding {
+  id           String   @id @map("id")
+  orgId        String   @map("org_id")
+  accountRef   String   @map("account_ref")
+  instrumentId String   @map("instrument_id")
+  unitsMinor   BigInt   @map("units_minor")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  instrument Instrument @relation(fields: [instrumentId], references: [id])
+
+  @@unique([orgId, accountRef, instrumentId])
+  @@map("holdings")
+}
+
+model Loan {
+  id             String     @id @map("id")
+  orgId          String     @map("org_id")
+  instrumentId   String?    @map("instrument_id")
+  borrowerRef    String     @map("borrower_ref")
+  principalMinor BigInt     @map("principal_minor")
+  rateBps        Int        @map("rate_bps")
+  collateralRef  String?    @map("collateral_ref")
+  currency       String     @db.VarChar(8)
+  status         LoanStatus @default(ACTIVE)
+  intentId       String?    @map("intent_id")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  instrument Instrument? @relation(fields: [instrumentId], references: [id])
+
+  @@index([orgId, status])
+  @@map("loans")
+}
+
+model Cashflow {
+  id            String       @id @map("id")
+  orgId         String       @map("org_id")
+  instrumentId  String       @map("instrument_id")
+  type          CashflowType
+  amountMinor   BigInt       @map("amount_minor")
+  currency      String       @db.VarChar(8)
+  scheduledAt   DateTime     @map("scheduled_at")
+  executedAt    DateTime?    @map("executed_at")
+  batchIntentId String?      @map("batch_intent_id")
+
+  instrument Instrument @relation(fields: [instrumentId], references: [id])
+
+  @@index([orgId, scheduledAt])
+  @@map("cashflows")
+}
+
+model DvpTrade {
+  id             String    @id @map("id")
+  orgId          String    @map("org_id")
+  buyerRef       String    @map("buyer_ref")
+  sellerRef      String    @map("seller_ref")
+  instrumentId   String    @map("instrument_id")
+  unitsMinor     BigInt    @map("units_minor")
+  priceMinor     BigInt    @map("price_minor")
+  currency       String    @db.VarChar(8)
+  status         DvpStatus @default(PENDING)
+  escrowIntentId String?   @map("escrow_intent_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([orgId, status])
+  @@map("dvp_trades")
+}

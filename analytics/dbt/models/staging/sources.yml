@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: salychain_analytics
+    description: >
+      Realtime canonical + proprietary tables populated by services/analytics-ingest
+      from the SalyChain event bus (B1). dbt models build on top of these.
+    schema: salychain_analytics
+    # Freshness is measured off ingested_at (set by analytics-ingest on write).
+    loaded_at_field: ingested_at
+    freshness:
+      warn_after: { count: 15, period: minute }
+      error_after: { count: 60, period: minute }
+    tables:
+      - name: raw_events
+      - name: blocks
+        freshness: null # block cadence varies by chain; don't alert on staleness
+      - name: token_transfers
+      - name: decoded_events
+      - name: tx_lifecycle
+        freshness: null
+      - name: intent_events
+        freshness: null
+      - name: agent_events
+        freshness: null

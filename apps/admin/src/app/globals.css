@@ -1,0 +1,56 @@
+@import '../styles/saly-tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-saly-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--saly-bg-primary);
+    color: var(--saly-text-primary);
+    font-family: var(--saly-font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: rgba(124, 58, 237, 0.35);
+    color: #fff;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
+
+@layer utilities {
+  .text-muted-foreground {
+    color: var(--saly-text-muted);
+  }
+
+  .saly-focus-ring {
+    @apply outline-none ring-2 ring-saly-accent/40 ring-offset-2 ring-offset-saly-bg-primary;
+  }
+}

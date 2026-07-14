@@ -1,0 +1,39 @@
+# Staging overlay for local/staging deploys.
+# Base infra (Postgres, Redis, NATS) comes from docker-compose.yml.
+#
+# Usage:
+#   cp .env.staging.example .env.staging
+#   docker compose -f infra/docker/docker-compose.yml \
+#     -f infra/docker/docker-compose.staging.yml \
+#     --env-file .env.staging up -d
+
+name: salychain-staging
+
+services:
+  fiat-listener:
+    build:
+      context: ../..
+      dockerfile: services/workers/fiat-listener/Dockerfile
+    container_name: salychain-fiat-listener
+    restart: unless-stopped
+    env_file:
+      - ../../.env.staging
+    environment:
+      PORT: ${FIAT_LISTENER_PORT:-4020}
+      DATABASE_URL: postgresql://salychain:salychain@postgres:5432/salychain_fiat_listener?schema=public
+      EXECUTION_BASE_URL: http://host.docker.internal:4003
+      EXECUTION_INTERNAL_WEBHOOK_TOKEN: ${EXECUTION_INTERNAL_WEBHOOK_TOKEN}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      FLUTTERWAVE_WEBHOOK_SECRET: ${FLUTTERWAVE_WEBHOOK_SECRET:-}
+    ports:
+      - "${FIAT_LISTENER_PORT:-4020}:4020"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:4020/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

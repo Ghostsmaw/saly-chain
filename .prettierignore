@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+coverage
+.turbo
+pnpm-lock.yaml
+*.lock
+infra/grafana/provisioning
+# Prisma client output is generated code — never hand-formatted.
+**/src/generated
+# Prisma migration SQL is emitted by the Prisma CLI.
+**/prisma/migrations

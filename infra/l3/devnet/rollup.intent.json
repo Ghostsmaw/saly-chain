@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ethereum-optimism/optimism/develop/op-deployer/pkg/deployer/artifacts/rollup-intent.schema.json",
+  "configType": "standard",
+  "l1ChainID": 84532,
+  "l2ChainID": 845320001,
+  "l1ContractsLocator": "embedded",
+  "l2ContractsLocator": "embedded",
+  "deploymentTarget": "live",
+  "fundDevAccounts": true,
+  "useInterop": false,
+  "roles": {
+    "l1ProxyAdminOwner": "0x0000000000000000000000000000000000000001",
+    "l2ProxyAdminOwner": "0x0000000000000000000000000000000000000001",
+    "systemConfigOwner": "0x0000000000000000000000000000000000000001",
+    "unsafeBlockSigner": "0x0000000000000000000000000000000000000001",
+    "batcher": "0x0000000000000000000000000000000000000001",
+    "proposer": "0x0000000000000000000000000000000000000001",
+    "challenger": "0x0000000000000000000000000000000000000001"
+  },
+  "comment": "Replace role addresses with your Base Sepolia deployer keys before op-deployer apply. See docs/runbooks/s5-l3-devnet-rollup.md"
+}

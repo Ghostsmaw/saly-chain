@@ -1,0 +1,126 @@
+// =============================================================================
+// SalyChain Compliance Service — Prisma schema
+//
+//   * `ComplianceSubject` is the per-actor verification record (KYC/KYB tier,
+//     country of residence, etc.).
+//   * `ScreeningResult` records every sanctions / PEP / adverse-media check we
+//     run; immutable, retained for regulator audit.
+//   * `ComplianceCase` is the open work queue for human reviewers when
+//     screening yields a flag.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubjectKind {
+  USER
+  BUSINESS
+  COUNTERPARTY
+  AGENT
+}
+
+enum VerificationTier {
+  TIER_0   /// Unverified — minimal limits
+  TIER_1   /// Email + phone verified
+  TIER_2   /// Government ID verified
+  TIER_3   /// Full KYC/KYB + proof of address
+  TIER_REJECTED
+}
+
+enum ScreeningDecision {
+  ALLOW
+  REVIEW
+  BLOCK
+}
+
+enum ScreeningCategory {
+  SANCTIONS
+  PEP
+  ADVERSE_MEDIA
+  ADDRESS_RISK
+  COUNTRY_RISK
+}
+
+enum CaseStatus {
+  OPEN
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum CasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model ComplianceSubject {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  externalRef     String           @unique @map("external_ref")
+  kind            SubjectKind
+  displayName     String?          @map("display_name")
+  countryCode     String?          @db.Char(2) @map("country_code")
+  tier            VerificationTier @default(TIER_0)
+  tierUpdatedAt   DateTime?        @map("tier_updated_at")
+  metadata        Json?
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  screenings      ScreeningResult[]
+  cases           ComplianceCase[]
+
+  @@index([kind, tier])
+  @@map("compliance_subjects")
+}
+
+model ScreeningResult {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subjectId       String?             @map("subject_id") @db.Uuid
+  /// Free-form target identifier when no subject exists (e.g. raw chain address).
+  targetIdentifier String              @map("target_identifier")
+  category        ScreeningCategory
+  decision        ScreeningDecision
+  /// Provider that produced this result (`embedded`, `chainalysis`, etc.).
+  provider        String
+  score           Int                  @default(0) /// 0..100, higher = riskier
+  matchedListIds  String[]             @default([]) @map("matched_list_ids")
+  details         Json?
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  subject         ComplianceSubject?   @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@index([subjectId, createdAt])
+  @@index([category, decision])
+  @@map("screening_results")
+}
+
+model ComplianceCase {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subjectId       String?       @map("subject_id") @db.Uuid
+  intentId        String?       @map("intent_id")
+  transactionId   String?       @map("transaction_id")
+  status          CaseStatus    @default(OPEN)
+  priority        CasePriority  @default(MEDIUM)
+  /// Free-form summary set by the screening service or analyst.
+  summary         String
+  /// Append-only review notes (each note is `{ author, body, at }`).
+  notes           Json          @default("[]")
+  assignedTo      String?       @map("assigned_to")
+  resolvedAt      DateTime?     @map("resolved_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  subject         ComplianceSubject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@index([status, priority, createdAt])
+  @@map("compliance_cases")
+}

@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: salychain
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: SalyChain platform (services, workers, web apps).
+  sourceRepos:
+    - https://github.com/salychain/salychain.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: salychain-staging
+    - server: https://kubernetes.default.svc
+      namespace: salychain-prod
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  orphanedResources:
+    warn: true

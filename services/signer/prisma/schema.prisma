@@ -1,0 +1,85 @@
+// =============================================================================
+// SalyChain Signer Service — Prisma schema
+//
+// This schema is intentionally minimal:
+//
+//   * `SignerKey` stores ONLY the wrapped (KMS-encrypted) private key blob,
+//     the public address, the chain, and metadata. Plaintext key material
+//     never crosses this boundary.
+//   * `SignRequest` is the audit log: every signing call, including its
+//     idempotency key, policy snapshot, and outcome.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SignerChain {
+  BASE
+  XRPL
+  ETHEREUM
+  POLYGON
+  SALY_L3
+}
+
+enum SignerKeyStatus {
+  ACTIVE
+  ROTATING
+  ARCHIVED
+}
+
+enum SignRequestOutcome {
+  SIGNED
+  POLICY_DENIED
+  ERROR
+}
+
+model SignerKey {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  keyRef          String          @unique @map("key_ref")
+  chain           SignerChain
+  publicAddress   String          @map("public_address")
+  /// Hex-encoded ciphertext of the private key under the configured KMS.
+  /// Format is provider-specific (local AES-256-GCM bundles iv|ciphertext|tag).
+  wrappedPrivateKey Bytes         @map("wrapped_private_key")
+  /// Reference to the wrapping key (KMS key id / version) so we can rotate.
+  wrappingKeyRef  String          @map("wrapping_key_ref")
+  status          SignerKeyStatus @default(ACTIVE)
+  label           String?
+  createdAt       DateTime        @default(now()) @map("created_at")
+  rotatedAt       DateTime?       @map("rotated_at")
+
+  signRequests    SignRequest[]
+
+  @@unique([chain, publicAddress])
+  @@index([status])
+  @@map("signer_keys")
+}
+
+model SignRequest {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  idempotencyKey  String              @unique @map("idempotency_key")
+  signerKeyId     String              @map("signer_key_id") @db.Uuid
+  chain           SignerChain
+  walletId        String?             @map("wallet_id")
+  /// Snapshot of the policy context evaluated for this request.
+  policyContext   Json                @map("policy_context")
+  unsignedTxHash  String              @map("unsigned_tx_hash")
+  outcome         SignRequestOutcome
+  reasonCode      String?             @map("reason_code")
+  reasonMessage   String?             @map("reason_message")
+  signedTxHash    String?             @map("signed_tx_hash")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  signerKey       SignerKey           @relation(fields: [signerKeyId], references: [id])
+
+  @@index([signerKeyId, createdAt])
+  @@index([outcome, createdAt])
+  @@map("sign_requests")
+}

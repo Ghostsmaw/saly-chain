@@ -1,0 +1,41 @@
+{
+  "name": "@salychain/sdk",
+  "version": "0.1.0",
+  "description": "Official SalyChain SDK — intents, transactions, webhooks (TypeScript / Node 20+)",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./webhooks": {
+      "types": "./dist/webhooks/verify.d.ts",
+      "import": "./dist/webhooks/verify.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@salychain/intent-schema": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}

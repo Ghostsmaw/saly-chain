@@ -1,0 +1,3 @@
+ALTER TYPE "BroadcastJobKind" ADD VALUE IF NOT EXISTS 'DEX_SWAP';
+
+ALTER TABLE "broadcast_jobs" ADD COLUMN IF NOT EXISTS "swap_payload" JSONB;

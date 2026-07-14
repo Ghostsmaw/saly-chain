@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: salychain-staging
+  labels:
+    app.kubernetes.io/part-of: salychain
+    salychain.io/env: staging
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: salychain-prod
+  labels:
+    app.kubernetes.io/part-of: salychain
+    salychain.io/env: production
+    pod-security.kubernetes.io/enforce: restricted

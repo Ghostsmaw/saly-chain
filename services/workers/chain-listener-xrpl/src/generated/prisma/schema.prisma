@@ -1,0 +1,24 @@
+// =============================================================================
+// XRPL Chain Listener — checkpoint storage
+//
+// Shares the wallet DB in dev. In production it gets its own small DB.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model XrplListenerCheckpoint {
+  chainKey        String   @id @map("chain_key")
+  /// Last validated ledger index processed.
+  lastLedgerIndex Int      @map("last_ledger_index")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("xrpl_listener_checkpoints")
+}

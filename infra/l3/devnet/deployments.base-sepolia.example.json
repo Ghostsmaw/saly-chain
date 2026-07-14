@@ -1,0 +1,27 @@
+{
+  "network": "saly-devnet",
+  "settlement": "base-sepolia",
+  "deployed_at": "2026-05-28T00:00:00.000Z",
+  "op_deployer_version": "op-deployer v1.x",
+  "l3_chain_id": 845320001,
+  "l3_rpc_url": "http://127.0.0.1:9545",
+  "assets": {
+    "USDC": "0x0000000000000000000000000000000000000004",
+    "SalySD": "0x0000000000000000000000000000000000000007",
+    "SalyAttestationRegistry": "0x0000000000000000000000000000000000000008",
+    "SalyAssetToken": "0x0000000000000000000000000000000000000009"
+  },
+  "governance": {
+    "token": "0x000000000000000000000000000000000000000a",
+    "timelock": "0x000000000000000000000000000000000000000b",
+    "governor": "0x000000000000000000000000000000000000000c"
+  },
+  "contracts": {
+    "l2OutputOracle": "0x0000000000000000000000000000000000000001",
+    "batchInbox": "0x0000000000000000000000000000000000000002",
+    "optimismPortal": "0x0000000000000000000000000000000000000003",
+    "l1StandardBridge": "0x0000000000000000000000000000000000000005",
+    "l2StandardBridge": "0x0000000000000000000000000000000000000006"
+  },
+  "notes": "Copy to deployments.base-sepolia.json after op-deployer apply. Replace placeholder addresses."
+}

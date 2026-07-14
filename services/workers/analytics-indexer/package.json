@@ -1,0 +1,35 @@
+{
+  "name": "@salychain/worker-analytics-indexer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Historical backfill + tip indexer: chain RPC → ClickHouse + Parquet lake",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist .turbo node_modules/.prisma",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "@salychain/analytics-decoder": "workspace:*",
+    "@salychain/analytics-indexer": "workspace:*",
+    "@salychain/chain-base": "workspace:*",
+    "@salychain/chain-l3": "workspace:*",
+    "@salychain/chain-xrpl": "workspace:*",
+    "@salychain/config": "workspace:*",
+    "@salychain/logger": "workspace:*",
+    "@salychain/observability": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "prisma": "^5.20.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}

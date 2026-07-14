@@ -1,0 +1,122 @@
+# =============================================================================
+# SalyChain Helm values — single source of truth for every deployable.
+#
+# Images are expected at:  {registry}/{component-name}:{tag}
+#   services → service-<name>     workers → worker-<name>     apps → app-<name>
+# Per-component secrets (DATABASE_URL, provider keys, etc.) are supplied via a
+# Kubernetes Secret named  "<release>-<name>-env"  (envFrom, optional at apply
+# time). Shared, non-secret config comes from the chart-managed ConfigMap.
+# =============================================================================
+
+global:
+  image:
+    registry: ghcr.io/salychain
+    tag: latest
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  # Mounted into every pod via envFrom (non-secret shared config).
+  sharedEnv:
+    NODE_ENV: production
+    LOG_LEVEL: info
+    NATS_URL: nats://nats:4222
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    OTEL_TRACES_EXPORTER: otlp
+    # Saly Analytics Cloud (B0–B4) — in-cluster service DNS.
+    CLICKHOUSE_URL: http://clickhouse:8123
+    ANALYTICS_API_URL: http://analytics-api:4016
+    DATA_BASE_URL: http://analytics-api:4016
+    # Saly Datastreams (B6) — gateway proxy target + Kafka/Redpanda broker.
+    DATASTREAMS_BASE_URL: http://analytics-datastreams:4017
+    DATASTREAMS_KAFKA_BROKERS: redpanda:9092
+    # Saly Datashares (B7) — gateway proxy target + object-store export endpoint.
+    DATASHARES_BASE_URL: http://analytics-datashares:4018
+    S3_ENDPOINT: http://minio:9000
+    # Saly Intelligence (B8) — gateway proxy target + risk feature source.
+    INTELLIGENCE_BASE_URL: http://analytics-intelligence:4019
+    MERCHANT_BASE_URL: http://merchant:4021
+    STABLECOIN_BASE_URL: http://stablecoin:4022
+    CONTRACT_REGISTRY_BASE_URL: http://contract-registry:4013
+    WALLET_BASE_URL: http://wallet:4002
+    L3_NETWORK: saly-testnet
+
+# Defaults applied to every service/worker/app unless overridden per-item.
+defaults:
+  replicas: 2
+  revisionHistoryLimit: 5
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: ["ALL"]
+
+# --- NestJS HTTP services ----------------------------------------------------
+# health: liveness/readiness probe path (defaults to /v1/health when omitted).
+services:
+  - { name: gateway, port: 4000, public: true }
+  - { name: ledger, port: 4001 }
+  - { name: wallet, port: 4002 }
+  - { name: execution, port: 4003 }
+  - { name: compliance, port: 4004 }
+  - { name: risk, port: 4005 }
+  - { name: liquidity, port: 4006 }
+  - { name: routing, port: 4007 }
+  - { name: intent, port: 4008 }
+  - { name: apikeys, port: 4009 }
+  - { name: webhooks, port: 4010 }
+  - { name: agents, port: 4011 }
+  - { name: identity, port: 4012 }
+  - { name: contract-registry, port: 4013 }
+  - { name: admin, port: 4014 }
+  - { name: analytics-ingest, port: 4015 }
+  - { name: analytics-api, port: 4016 }
+  - { name: analytics-datastreams, port: 4017 }
+  - { name: analytics-datashares, port: 4018 }
+  - { name: analytics-intelligence, port: 4019 }
+  - { name: merchant, port: 4021 }
+  - { name: stablecoin, port: 4022 }
+  - { name: signer, port: 4099, replicas: 2 }
+
+# --- Background workers (no public API; expose /metrics + /health) ------------
+workers:
+  - { name: chain-listener-base, metricsPort: 9090 }
+  - { name: chain-listener-base-bridge, metricsPort: 9102 }
+  - { name: chain-listener-xrpl, metricsPort: 9090 }
+  - { name: chain-listener-l3, metricsPort: 9090 }
+  - { name: l3-rollup-monitor, metricsPort: 9090 }
+  - { name: l3-rpc-gateway, metricsPort: 9105, replicas: 2 }
+  - { name: l3-ops-monitor, metricsPort: 9107, replicas: 1 }
+  - { name: fiat-listener, metricsPort: 9090, replicas: 1 }
+  - { name: analytics-indexer, metricsPort: 9106, replicas: 1 }
+  - { name: stablecoin-por, metricsPort: 9108, replicas: 1 }
+
+# --- Next.js web apps --------------------------------------------------------
+apps:
+  - { name: portal, port: 3000, host: portal.salychain.example }
+  - { name: admin, port: 3000, host: admin.salychain.example }
+  - { name: business, port: 3000, host: business.salychain.example }
+  - { name: explorer, port: 3000, host: explorer.salychain.example }
+
+# --- Ingress (gateway API + web apps) ----------------------------------------
+ingress:
+  enabled: false
+  className: nginx
+  apiHost: api.salychain.example
+  annotations: {}
+  tls: []
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: /metrics

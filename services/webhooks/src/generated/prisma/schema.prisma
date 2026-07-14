@@ -1,0 +1,110 @@
+// =============================================================================
+// SalyChain Webhooks Service — Prisma schema
+//
+// Three core models:
+//
+//   Subscription   — an org's webhook endpoint. Lists subjects it wants to
+//                    receive, owns a signing secret (rotatable), and tracks
+//                    health (consecutive failures, last delivery, disabled-since).
+//   Delivery       — one attempt to deliver one event to one subscription. Append-only.
+//                    Includes the response code, latency, and body excerpt.
+//   DeadLetter     — a per-event resting place for events that exhausted all
+//                    delivery attempts. Holds enough metadata to replay.
+//
+// Outbox-style: every NATS event we care about is materialized as Delivery rows
+// up-front. The worker picks them off the BullMQ queue and updates the row in
+// place; if it crashes mid-flight we re-enqueue from PENDING/RETRYABLE rows on
+// boot.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  DISABLED /// auto-disabled after too many consecutive failures
+}
+
+enum DeliveryStatus {
+  PENDING /// queued, not yet attempted
+  IN_FLIGHT /// worker has it
+  SUCCEEDED /// 2xx response from the subscriber
+  RETRYABLE /// 5xx/timeout/dns — will be retried with backoff
+  FAILED /// 4xx (other than 408/429) — caller error, will not retry
+  DEAD /// exhausted attempts → DeadLetter row created
+}
+
+model Subscription {
+  id                  String             @id @map("id")
+  orgId               String             @map("org_id")
+  url                 String
+  description         String?
+  subjects            String[]           @default([])
+  status              SubscriptionStatus @default(ACTIVE)
+  /// Hex-encoded signing secret. The subscriber HMAC-verifies every delivery
+  /// using this secret. Rotation issues a new row and disables the old one.
+  signingSecret       String             @map("signing_secret")
+  signingKeyId        String             @map("signing_key_id")
+  consecutiveFailures Int                @default(0) @map("consecutive_failures")
+  disabledAt          DateTime?          @map("disabled_at")
+  lastSucceededAt     DateTime?          @map("last_succeeded_at")
+  lastAttemptedAt     DateTime?          @map("last_attempted_at")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+
+  deliveries Delivery[]
+
+  @@index([orgId, status])
+  @@map("subscriptions")
+}
+
+model Delivery {
+  id                  String         @id @map("id")
+  subscriptionId      String         @map("subscription_id")
+  /// NATS subject (e.g. `salychain.tx.settled`).
+  subject             String
+  /// Idempotency key — `event_id` from the source event. The same event delivered
+  /// to the same subscription has the same id.
+  eventId             String         @map("event_id")
+  payload             Json
+  attempts            Int            @default(0)
+  status              DeliveryStatus @default(PENDING)
+  lastStatusCode      Int?           @map("last_status_code")
+  lastResponseExcerpt String?        @map("last_response_excerpt")
+  lastLatencyMs       Int?           @map("last_latency_ms")
+  lastError           String?        @map("last_error")
+  nextAttemptAt       DateTime?      @map("next_attempt_at")
+  succeededAt         DateTime?      @map("succeeded_at")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@unique([subscriptionId, eventId])
+  @@index([status, nextAttemptAt])
+  @@map("deliveries")
+}
+
+model DeadLetter {
+  id             String   @id @map("id")
+  deliveryId     String   @unique @map("delivery_id")
+  subscriptionId String   @map("subscription_id")
+  subject        String
+  eventId        String   @map("event_id")
+  payload        Json
+  attempts       Int
+  lastStatusCode Int?     @map("last_status_code")
+  lastError      String?  @map("last_error")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([subscriptionId, createdAt])
+  @@map("dead_letters")
+}

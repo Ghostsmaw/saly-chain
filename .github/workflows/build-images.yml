@@ -1,0 +1,108 @@
+name: Build & Push Images
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  build:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- services (Dockerfile.node) ---
+          - { image: service-gateway, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-gateway", workdir: services/gateway }
+          - { image: service-ledger, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-ledger", workdir: services/ledger }
+          - { image: service-wallet, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-wallet", workdir: services/wallet }
+          - { image: service-execution, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-execution", workdir: services/execution }
+          - { image: service-compliance, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-compliance", workdir: services/compliance }
+          - { image: service-risk, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-risk", workdir: services/risk }
+          - { image: service-liquidity, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-liquidity", workdir: services/liquidity }
+          - { image: service-routing, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-routing", workdir: services/routing }
+          - { image: service-intent, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-intent", workdir: services/intent }
+          - { image: service-apikeys, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-apikeys", workdir: services/apikeys }
+          - { image: service-webhooks, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-webhooks", workdir: services/webhooks }
+          - { image: service-agents, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-agents", workdir: services/agents }
+          - { image: service-identity, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-identity", workdir: services/identity }
+          - { image: service-contract-registry, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-contract-registry", workdir: services/contract-registry }
+          - { image: service-admin, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-admin", workdir: services/admin }
+          - { image: service-analytics-ingest, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-analytics-ingest", workdir: services/analytics-ingest }
+          - { image: service-analytics-api, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-analytics-api", workdir: services/analytics-api }
+          - { image: service-analytics-datastreams, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-analytics-datastreams", workdir: services/analytics-datastreams }
+          - { image: service-analytics-datashares, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-analytics-datashares", workdir: services/analytics-datashares }
+          - { image: service-analytics-intelligence, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-analytics-intelligence", workdir: services/analytics-intelligence }
+          - { image: service-merchant, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-merchant", workdir: services/merchant }
+          - { image: service-stablecoin, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-stablecoin", workdir: services/stablecoin }
+          - { image: service-signer, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/service-signer", workdir: services/signer }
+          # --- workers (Dockerfile.node) ---
+          - { image: worker-chain-listener-base, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-chain-listener-base", workdir: services/workers/chain-listener-base }
+          - { image: worker-chain-listener-base-bridge, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-chain-listener-base-bridge", workdir: services/workers/chain-listener-base-bridge }
+          - { image: worker-chain-listener-xrpl, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-chain-listener-xrpl", workdir: services/workers/chain-listener-xrpl }
+          - { image: worker-chain-listener-l3, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-chain-listener-l3", workdir: services/workers/chain-listener-l3 }
+          - { image: worker-l3-rollup-monitor, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-l3-rollup-monitor", workdir: services/workers/l3-rollup-monitor }
+          - { image: worker-l3-rpc-gateway, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-l3-rpc-gateway", workdir: services/workers/l3-rpc-gateway }
+          - { image: worker-l3-ops-monitor, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-l3-ops-monitor", workdir: services/workers/l3-ops-monitor }
+          - { image: worker-fiat-listener, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-fiat-listener", workdir: services/workers/fiat-listener }
+          - { image: worker-analytics-indexer, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-analytics-indexer", workdir: services/workers/analytics-indexer }
+          - { image: worker-stablecoin-por, dockerfile: infra/docker/Dockerfile.node, package: "@salychain/worker-stablecoin-por", workdir: services/workers/stablecoin-por }
+          # --- web apps (Dockerfile.web) ---
+          - { image: app-portal, dockerfile: infra/docker/Dockerfile.web, package: "@salychain/app-portal", appdir: apps/portal }
+          - { image: app-admin, dockerfile: infra/docker/Dockerfile.web, package: "@salychain/app-admin", appdir: apps/admin }
+          - { image: app-business, dockerfile: infra/docker/Dockerfile.web, package: "@salychain/app-business", appdir: apps/business }
+          - { image: app-explorer, dockerfile: infra/docker/Dockerfile.web, package: "@salychain/app-explorer", appdir: apps/explorer }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          build-args: |
+            PACKAGE=${{ matrix.package }}
+            WORKDIR=${{ matrix.workdir }}
+            APP_DIR=${{ matrix.appdir }}

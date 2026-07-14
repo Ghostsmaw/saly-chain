@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model EventOutbox {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String       @unique @map("event_id")
+  subject     String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  publishedAt DateTime?    @map("published_at")
+
+  @@index([status, createdAt])
+  @@map("event_outbox")
+}
+
+enum LoanStatus {
+  ACTIVE
+  REPAID
+  DEFAULTED
+}
+
+enum PolicyStatus {
+  ACTIVE
+  EXPIRED
+  CLAIMED
+}
+
+model Farmer {
+  id          String   @id @map("id")
+  orgId       String   @map("org_id")
+  externalRef String   @map("external_ref")
+  kycLite     String   @default("PENDING") @map("kyc_lite")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  farms Farm[]
+
+  @@unique([orgId, externalRef])
+  @@map("farmers")
+}
+
+model Farm {
+  id        String   @id @map("id")
+  orgId     String   @map("org_id")
+  farmerId  String   @map("farmer_id")
+  geo       Json?
+  crop      String?
+  season    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  farmer Farmer       @relation(fields: [farmerId], references: [id])
+  lots   ProduceLot[]
+
+  @@index([orgId, farmerId])
+  @@map("farms")
+}
+
+model InputLoan {
+  id             String     @id @map("id")
+  orgId          String     @map("org_id")
+  farmerId       String     @map("farmer_id")
+  amountMinor    BigInt     @map("amount_minor")
+  currency       String     @db.VarChar(8)
+  status         LoanStatus @default(ACTIVE)
+  payoutIntentId String?    @map("payout_intent_id")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  @@index([orgId, farmerId])
+  @@map("input_loans")
+}
+
+model InsurancePolicy {
+  id            String       @id @map("id")
+  orgId         String       @map("org_id")
+  farmerId      String       @map("farmer_id")
+  triggerMetric String       @map("trigger_metric")
+  threshold     String
+  premiumMinor  BigInt       @map("premium_minor")
+  payoutMinor   BigInt       @map("payout_minor")
+  currency      String       @db.VarChar(8)
+  status        PolicyStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@index([orgId, status])
+  @@map("insurance_policies")
+}
+
+model ProduceLot {
+  id            String   @id @map("id")
+  orgId         String   @map("org_id")
+  farmId        String   @map("farm_id")
+  lotCode       String   @map("lot_code")
+  origin        String?
+  attestationId String?  @map("attestation_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  farm    Farm             @relation(fields: [farmId], references: [id])
+  custody CustodyHandoff[]
+
+  @@unique([orgId, lotCode])
+  @@map("produce_lots")
+}
+
+model CustodyHandoff {
+  id            String   @id @map("id")
+  orgId         String   @map("org_id")
+  lotId         String   @map("lot_id")
+  actorRef      String   @map("actor_ref")
+  geo           Json?
+  attestationId String?  @map("attestation_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  lot ProduceLot @relation(fields: [lotId], references: [id])
+
+  @@index([lotId])
+  @@map("custody_handoffs")
+}
+
+model OfftakeContract {
+  id             String   @id @map("id")
+  orgId          String   @map("org_id")
+  lotId          String   @map("lot_id")
+  buyerRef       String   @map("buyer_ref")
+  priceMinor     BigInt   @map("price_minor")
+  currency       String   @db.VarChar(8)
+  escrowIntentId String?  @map("escrow_intent_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, lotId])
+  @@map("offtake_contracts")
+}

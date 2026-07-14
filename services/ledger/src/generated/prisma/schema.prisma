@@ -1,0 +1,166 @@
+// =============================================================================
+// SalyChain Ledger — Prisma schema
+//
+// Design notes:
+//   * Append-only journal. Reversals are new entries that offset existing ones;
+//     postings are never updated in place.
+//   * Money is stored as BIGINT minor units. See ADR-0004.
+//   * `Account.balance_minor` is a denormalized cache; it is reconciled by a
+//     scheduled job and a database trigger validates double-entry balance per
+//     posted journal entry. Reads should generally trust the cache; correctness
+//     reads should use `sumPostings(accountId)`.
+//   * Idempotency: every JournalEntry carries a globally unique idempotency key
+//     supplied by the caller. Duplicate creates return the existing entry.
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  output          = "../src/generated/prisma"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto]
+}
+
+// ──────────────────────────── Enums ────────────────────────────
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum AccountStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum PostingDirection {
+  DEBIT
+  CREDIT
+}
+
+enum JournalEntryStatus {
+  PENDING
+  POSTED
+  REVERSED
+}
+
+enum TransactionKind {
+  PAYIN
+  PAYOUT
+  TRANSFER
+  SWAP
+  FEE
+  REWARD
+  REVERSAL
+}
+
+// ──────────────────────────── Accounts ────────────────────────────
+
+model Account {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code         String        @unique
+  type         AccountType
+  currency     String        @db.VarChar(8)
+  ownerId      String?       @map("owner_id")
+  ownerKind    String?       @map("owner_kind")
+  status       AccountStatus @default(ACTIVE)
+  balanceMinor BigInt        @default(0) @map("balance_minor")
+  metadata     Json?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  postings Posting[]
+
+  @@index([ownerKind, ownerId])
+  @@index([currency])
+  @@map("accounts")
+}
+
+// ──────────────────────────── Journal entries ────────────────────────────
+
+model JournalEntry {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  idempotencyKey String             @unique @map("idempotency_key")
+  transactionId  String?            @map("transaction_id") @db.Uuid
+  status         JournalEntryStatus @default(PENDING)
+  memo           String?
+  metadata       Json?
+  postedAt       DateTime?          @map("posted_at")
+  reversedById   String?            @unique @map("reversed_by_id") @db.Uuid
+  reversesId     String?            @unique @map("reverses_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  postings    Posting[]
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  reversedBy JournalEntry? @relation("Reversal", fields: [reversedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversalOf JournalEntry? @relation("Reversal")
+
+  @@index([transactionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("journal_entries")
+}
+
+// ──────────────────────────── Postings ────────────────────────────
+
+model Posting {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  journalEntryId String           @map("journal_entry_id") @db.Uuid
+  accountId      String           @map("account_id") @db.Uuid
+  direction      PostingDirection
+  amountMinor    BigInt           @map("amount_minor")
+  currency       String           @db.VarChar(8)
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+  account      Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt])
+  @@index([journalEntryId])
+  @@map("postings")
+}
+
+// ──────────────────────────── Transactions ────────────────────────────
+// `Transaction` is the business-level abstraction; one transaction may
+// produce many JournalEntries (initial post, fee post, reversal, etc.).
+
+model Transaction {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  externalRef String?         @unique @map("external_ref")
+  kind        TransactionKind
+  intentId    String?         @map("intent_id")
+  metadata    Json?
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  journalEntries JournalEntry[]
+
+  @@index([intentId])
+  @@map("transactions")
+}
+
+// ──────────────────────────── Audit ────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId     String?  @map("actor_id")
+  actorKind   String?  @map("actor_kind")
+  action      String
+  subjectKind String   @map("subject_kind")
+  subjectId   String   @map("subject_id")
+  payload     Json?
+  occurredAt  DateTime @default(now()) @map("occurred_at")
+
+  @@index([subjectKind, subjectId])
+  @@index([occurredAt])
+  @@map("audit_log")
+}

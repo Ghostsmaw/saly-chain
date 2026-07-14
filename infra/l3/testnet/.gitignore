@@ -1,0 +1,4 @@
+# Gitignored secrets + live deployment manifest (see example JSON).
+.env
+deployments.base-sepolia.json
+artifacts/

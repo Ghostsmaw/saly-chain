@@ -1,0 +1,22 @@
+// =============================================================================
+// Chain Listener (Base Bridge) — checkpoint storage
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ChainListenerCheckpoint {
+  chainKey        String   @id @map("chain_key")
+  lastBlockNumber BigInt   @map("last_block_number")
+  lastBlockHash   String   @map("last_block_hash")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("chain_listener_checkpoints")
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@salychain/worker-chain-listener-base",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Subscribes to Base for USDC Transfer logs against custodial wallets and emits settlement events",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist .turbo node_modules/.prisma",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "@salychain/chain-base": "workspace:*",
+    "@salychain/config": "workspace:*",
+    "@salychain/errors": "workspace:*",
+    "@salychain/events": "workspace:*",
+    "@salychain/finality": "workspace:*",
+    "@salychain/logger": "workspace:*",
+    "@salychain/observability": "workspace:*",
+    "ulid": "^2.3.0",
+    "viem": "^2.21.19",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "prisma": "^5.20.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}

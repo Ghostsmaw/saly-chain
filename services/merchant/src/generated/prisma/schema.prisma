@@ -1,0 +1,109 @@
+// =============================================================================
+// SalyChain Merchant Service — Prisma schema (C3)
+//
+// Payment links, hosted checkout sessions, and settlement report snapshots.
+// Money movement stays in execution (FIAT_PAYIN via C2); this service owns the
+// merchant product surface and correlates pay-ins back to links/sessions.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentLinkStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum CheckoutSessionStatus {
+  OPEN
+  AWAITING_PAYMENT
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum SettlementReportStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+model PaymentLink {
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId                 String            @map("org_id")
+  /// Public slug embedded in hosted checkout URLs (unguessable).
+  slug                  String            @unique
+  title                 String
+  description           String?
+  amountMinor           BigInt            @map("amount_minor")
+  currency              String
+  country               String            @db.Char(2)
+  actorId               String            @map("actor_id")
+  destinationAccountRef String            @map("destination_account_ref")
+  status                PaymentLinkStatus @default(ACTIVE)
+  successRedirectUrl    String?           @map("success_redirect_url")
+  metadata              Json?
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  checkoutSessions CheckoutSession[]
+
+  @@index([orgId, createdAt])
+  @@map("payment_links")
+}
+
+model CheckoutSession {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId                  String                @map("org_id")
+  paymentLinkId          String?               @map("payment_link_id") @db.Uuid
+  idempotencyKey         String                @unique @map("idempotency_key")
+  status                 CheckoutSessionStatus @default(OPEN)
+  amountMinor            BigInt                @map("amount_minor")
+  currency               String
+  country                String                @db.Char(2)
+  destinationAccountRef  String                @map("destination_account_ref")
+  actorId                String                @map("actor_id")
+  customerName           String                @map("customer_name")
+  customerEmail          String?               @map("customer_email")
+  intentId               String?               @map("intent_id")
+  executionTransactionId String?               @map("execution_transaction_id")
+  instruction            Json?
+  expiresAt              DateTime?             @map("expires_at")
+  completedAt            DateTime?             @map("completed_at")
+  failureReason          String?               @map("failure_reason")
+  metadata               Json?
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+
+  paymentLink PaymentLink? @relation(fields: [paymentLinkId], references: [id])
+
+  @@index([orgId, createdAt])
+  @@index([status, createdAt])
+  @@index([executionTransactionId])
+  @@map("checkout_sessions")
+}
+
+model SettlementReport {
+  id                String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId             String                 @map("org_id")
+  periodStart       DateTime               @map("period_start")
+  periodEnd         DateTime               @map("period_end")
+  currency          String?
+  status            SettlementReportStatus @default(PENDING)
+  totalSettledMinor BigInt?                @map("total_settled_minor")
+  transactionCount  Int?                   @map("transaction_count")
+  lines             Json?
+  error             String?
+  generatedAt       DateTime?              @map("generated_at")
+  createdAt         DateTime               @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt])
+  @@map("settlement_reports")
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@salychain/contracts-l3-usdc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SalyTestUSDC — 6-decimal devnet/testnet USDC for the Saly L3 money rail (Foundry / Solidity 0.8.24)",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test -vvv",
+    "fmt": "forge fmt",
+    "snapshot": "forge snapshot",
+    "deploy:l3": "forge script script/DeployTestUsdc.s.sol --rpc-url saly-l3 --broadcast",
+    "typecheck": "echo 'no-op (solidity workspace)'",
+    "clean": "rm -rf out cache broadcast .turbo"
+  }
+}

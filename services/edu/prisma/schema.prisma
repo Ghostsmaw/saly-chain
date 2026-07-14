@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model EventOutbox {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String       @unique @map("event_id")
+  subject     String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  publishedAt DateTime?    @map("published_at")
+
+  @@index([status, createdAt])
+  @@map("event_outbox")
+}
+
+enum CredentialType {
+  DEGREE
+  CERTIFICATE
+  BADGE
+}
+
+enum CredentialStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum ScholarshipStatus {
+  ACTIVE
+  DISBURSED
+  CANCELLED
+}
+
+model Institution {
+  id        String   @id @map("id")
+  orgId     String   @map("org_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  credentials Credential[]
+  enrollments Enrollment[]
+
+  @@index([orgId])
+  @@map("institutions")
+}
+
+model Learner {
+  id          String   @id @map("id")
+  orgId       String   @map("org_id")
+  subjectHash String   @map("subject_hash")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  credentials Credential[]
+  enrollments Enrollment[]
+
+  @@unique([orgId, subjectHash])
+  @@map("learners")
+}
+
+model Credential {
+  id            String           @id @map("id")
+  orgId         String           @map("org_id")
+  institutionId String           @map("institution_id")
+  learnerId     String           @map("learner_id")
+  type          CredentialType
+  dataHash      String           @map("data_hash")
+  attestationId String?          @map("attestation_id")
+  status        CredentialStatus @default(ACTIVE)
+  issuedAt      DateTime         @default(now()) @map("issued_at")
+  expiresAt     DateTime?        @map("expires_at")
+
+  institution Institution @relation(fields: [institutionId], references: [id])
+  learner     Learner     @relation(fields: [learnerId], references: [id])
+
+  @@index([orgId, learnerId])
+  @@map("credentials")
+}
+
+model Enrollment {
+  id            String   @id @map("id")
+  orgId         String   @map("org_id")
+  institutionId String   @map("institution_id")
+  learnerId     String   @map("learner_id")
+  program       String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  institution Institution @relation(fields: [institutionId], references: [id])
+  learner     Learner     @relation(fields: [learnerId], references: [id])
+
+  @@index([orgId])
+  @@map("enrollments")
+}
+
+model TuitionInvoice {
+  id        String   @id @map("id")
+  orgId     String   @map("org_id")
+  learnerId String   @map("learner_id")
+  amountMinor BigInt @map("amount_minor")
+  currency  String   @db.VarChar(8)
+  intentId  String?  @map("intent_id")
+  dueAt     DateTime @map("due_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, learnerId])
+  @@map("tuition_invoices")
+}
+
+model ScholarshipGrant {
+  id             String            @id @map("id")
+  orgId          String            @map("org_id")
+  learnerId      String            @map("learner_id")
+  amountMinor    BigInt            @map("amount_minor")
+  currency       String            @db.VarChar(8)
+  milestone      String
+  status         ScholarshipStatus @default(ACTIVE)
+  escrowIntentId String?           @map("escrow_intent_id")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  @@index([orgId, status])
+  @@map("scholarship_grants")
+}

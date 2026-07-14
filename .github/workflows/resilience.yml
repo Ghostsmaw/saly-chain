@@ -1,0 +1,103 @@
+name: Resilience
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: resilience-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  PNPM_VERSION: '9.12.0'
+
+jobs:
+  finality-and-resilience:
+    name: Finality + e2e/chaos/load scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build finality package
+        run: pnpm -F @salychain/finality build
+
+      - name: Finality unit tests
+        run: pnpm -F @salychain/finality test
+
+      - name: Resilience e2e suite
+        run: pnpm -F @salychain/resilience-tests test:e2e
+
+      - name: Resilience chaos suite
+        run: pnpm -F @salychain/resilience-tests test:chaos
+
+      - name: Load script contract tests
+        run: pnpm -F @salychain/resilience-tests test:load-scripts
+
+  execution-finality:
+    name: Execution finality + state machine
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: finality-and-resilience
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: salychain
+          POSTGRES_PASSWORD: salychain
+          POSTGRES_DB: salychain
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U salychain -d salychain"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Initialize databases
+        run: |
+          PGPASSWORD=salychain psql -h localhost -p 5433 -U salychain -d salychain -f infra/docker/postgres/init/00-databases.sql
+
+      - name: Generate Prisma clients
+        run: pnpm db:generate
+
+      - name: Execution tests (state machine + unit)
+        run: pnpm -F @salychain/service-execution test -- src/state/state-machine.spec.ts

@@ -1,0 +1,68 @@
+// =============================================================================
+// SalyChain Liquidity Service — Prisma schema
+//
+//   * `FxRateSnapshot` is a point-in-time mid-market rate captured for an audit
+//     trail (provider, pair, timestamp). Rates persist for at least 14 days for
+//     ops triage and replay-based reconciliation.
+//   * `Quote` is a quoted FX conversion. Issued with a TTL and a signature; the
+//     execution service must present the unmodified quote at draw-down time.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum QuoteStatus {
+  ISSUED
+  CONSUMED
+  EXPIRED
+  CANCELLED
+}
+
+model FxRateSnapshot {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider      String
+  baseCurrency  String   @map("base_currency") @db.Char(3)
+  quoteCurrency String   @map("quote_currency") @db.Char(3)
+  /// Mid-market rate * 10^8 (8 decimal precision). Use BigInt to avoid float drift.
+  midRate1e8    BigInt   @map("mid_rate_1e8")
+  capturedAt    DateTime @map("captured_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([baseCurrency, quoteCurrency, capturedAt])
+  @@map("fx_rate_snapshots")
+}
+
+model Quote {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  intentId        String?     @map("intent_id")
+  /// Currency the user is selling.
+  fromCurrency    String      @map("from_currency") @db.Char(3)
+  /// Currency the user is buying.
+  toCurrency      String      @map("to_currency") @db.Char(3)
+  fromAmountMinor BigInt      @map("from_amount_minor")
+  toAmountMinor   BigInt      @map("to_amount_minor")
+  /// Quoted all-in rate * 10^8 including spread + fees.
+  quotedRate1e8   BigInt      @map("quoted_rate_1e8")
+  /// Provider mid at the time of quote (audit / reconciliation).
+  midRate1e8      BigInt      @map("mid_rate_1e8")
+  spreadBps       Int         @map("spread_bps")
+  provider        String
+  status          QuoteStatus @default(ISSUED)
+  /// HMAC-SHA256 of the canonical quote payload using LIQUIDITY_QUOTE_SIGNING_SECRET.
+  signature       String
+  expiresAt       DateTime    @map("expires_at")
+  consumedAt      DateTime?   @map("consumed_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  /// DEX calldata / router / minOut when provider starts with `dex:`.
+  metadata        Json?
+
+  @@index([status, expiresAt])
+  @@map("quotes")
+}

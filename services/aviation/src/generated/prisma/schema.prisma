@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model EventOutbox {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String       @unique @map("event_id")
+  subject     String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  publishedAt DateTime?    @map("published_at")
+
+  @@index([status, createdAt])
+  @@map("event_outbox")
+}
+
+enum PartLifecycle {
+  NEW
+  INSTALLED
+  REMOVED
+  SCRAPPED
+}
+
+enum AviationSettlementStatus {
+  PENDING
+  ESCROW_FUNDED
+  SETTLED
+  CANCELLED
+}
+
+model Aircraft {
+  id        String   @id @map("id")
+  orgId     String   @map("org_id")
+  tail      String
+  model     String
+  ownerRef  String   @map("owner_ref")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  parts Part[]
+
+  @@unique([orgId, tail])
+  @@map("aircraft")
+}
+
+model Part {
+  id              String        @id @map("id")
+  orgId           String        @map("org_id")
+  aircraftId      String?       @map("aircraft_id")
+  serial          String
+  partType        String        @map("part_type")
+  lifecycleStatus PartLifecycle @default(NEW) @map("lifecycle_status")
+  tokenId         String?       @map("token_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  aircraft    Aircraft?          @relation(fields: [aircraftId], references: [id])
+  maintenance MaintenanceEvent[]
+
+  @@unique([orgId, serial])
+  @@map("parts")
+}
+
+model MaintenanceEvent {
+  id            String   @id @map("id")
+  orgId         String   @map("org_id")
+  partId        String   @map("part_id")
+  action        String
+  technicianRef String   @map("technician_ref")
+  attestationId String?  @map("attestation_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  part Part @relation(fields: [partId], references: [id])
+
+  @@index([partId])
+  @@map("maintenance_events")
+}
+
+model AirworthinessCert {
+  id            String   @id @map("id")
+  orgId         String   @map("org_id")
+  aircraftId    String   @map("aircraft_id")
+  attestationId String   @map("attestation_id")
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, aircraftId])
+  @@map("airworthiness_certs")
+}
+
+model AviationSettlement {
+  id             String                   @id @map("id")
+  orgId          String                   @map("org_id")
+  partId         String                   @map("part_id")
+  buyerRef       String                   @map("buyer_ref")
+  sellerRef      String                   @map("seller_ref")
+  amountMinor    BigInt                   @map("amount_minor")
+  currency       String                   @db.VarChar(8)
+  status         AviationSettlementStatus @default(PENDING)
+  escrowIntentId String?                  @map("escrow_intent_id")
+  createdAt      DateTime                 @default(now()) @map("created_at")
+
+  @@index([orgId, status])
+  @@map("aviation_settlements")
+}

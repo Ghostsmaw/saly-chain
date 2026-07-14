@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root,
+  [data-theme='dark'] {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    background: radial-gradient(
+        1200px 600px at 15% -10%,
+        rgba(106, 53, 240, 0.18) 0%,
+        rgba(106, 53, 240, 0) 60%
+      ),
+      radial-gradient(
+        900px 500px at 95% 0%,
+        rgba(43, 201, 240, 0.1) 0%,
+        rgba(43, 201, 240, 0) 60%
+      ),
+      #0b0820;
+    color: #f4f2ff;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: rgba(129, 89, 255, 0.35);
+    color: #ffffff;
+  }
+
+  /* Custom scrollbar */
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(129, 89, 255, 0.2);
+    border-radius: 8px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(129, 89, 255, 0.35);
+  }
+}
+
+@layer components {
+  .saly-card {
+    @apply rounded-xl border border-surface-border bg-surface-card/80 backdrop-blur-sm;
+    @apply shadow-card;
+  }
+  .saly-card-hover {
+    @apply transition-colors hover:bg-surface-cardHover hover:border-surface-borderStrong;
+  }
+  .saly-chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+  .saly-chip-success {
+    @apply saly-chip bg-success-500/15 text-success-300;
+  }
+  .saly-chip-warning {
+    @apply saly-chip bg-warning-500/15 text-warning-300;
+  }
+  .saly-chip-danger {
+    @apply saly-chip bg-danger-500/15 text-danger-300;
+  }
+  .saly-chip-info {
+    @apply saly-chip bg-info-500/15 text-info-300;
+  }
+  .saly-chip-brand {
+    @apply saly-chip bg-brand-500/15 text-brand-300;
+  }
+}

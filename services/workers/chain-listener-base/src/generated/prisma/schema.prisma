@@ -1,0 +1,26 @@
+// =============================================================================
+// Chain Listener (Base) — checkpoint storage
+//
+// Lives in the wallet DB in dev for convenience; in production it has its own
+// small DB so the listener can be scaled and recovered independently.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ChainListenerCheckpoint {
+  /// Composite key: chain + network identifier. e.g. "BASE:base-sepolia".
+  chainKey        String   @id @map("chain_key")
+  lastBlockNumber BigInt   @map("last_block_number")
+  lastBlockHash   String   @map("last_block_hash")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("chain_listener_checkpoints")
+}

@@ -1,0 +1,138 @@
+// =============================================================================
+// SalyChain Datastreams Service — Prisma schema (B6)
+//
+// Saly Datastreams lets a partner subscribe to a *filtered* slice of the live
+// event spine and have matching events pushed to a destination (sink) of their
+// choosing. Three core models:
+//
+//   Stream             — an org's filtered subscription. Owns a filter spec
+//                        (chain/asset/address/amount/event-type predicates), a
+//                        sink (WEBHOOK | KAFKA), sink config, a rotatable HMAC
+//                        signing secret, and health counters.
+//   StreamDelivery     — one attempt to push one matched event to one stream's
+//                        sink. Append-only; idempotent on (streamId, eventId).
+//   StreamDeadLetter   — resting place for deliveries that exhausted retries,
+//                        with enough metadata to replay.
+//
+// Same outbox-style guarantee as the webhooks service: every matched event is
+// materialized as a StreamDelivery row up-front, then a BullMQ worker drains it
+// with HMAC signing + exponential backoff + dead-letter on exhaustion. Delivery
+// is at-least-once; the (streamId, eventId) unique constraint dedupes redelivery
+// from the at-least-once NATS consumer.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StreamStatus {
+  ACTIVE
+  PAUSED
+  DISABLED /// auto-disabled after too many consecutive delivery failures
+}
+
+enum StreamSink {
+  WEBHOOK /// HMAC-signed HTTPS POST (retry + DLQ)
+  KAFKA /// produce to a managed Kafka/Redpanda topic (enterprise volume)
+  WEBSOCKET /// best-effort live fan-out to connected dashboard clients (no DLQ)
+}
+
+enum StreamDeliveryStatus {
+  PENDING /// queued, not yet attempted
+  IN_FLIGHT /// worker has it
+  SUCCEEDED /// sink accepted the event
+  RETRYABLE /// transient failure — will be retried with backoff
+  FAILED /// permanent caller error (e.g. 4xx) — will not retry
+  DEAD /// exhausted attempts → StreamDeadLetter row created
+}
+
+model Stream {
+  id          String       @id @map("id")
+  orgId       String       @map("org_id")
+  name        String
+  description String?
+  status      StreamStatus @default(ACTIVE)
+  sink        StreamSink   @default(WEBHOOK)
+
+  /// Filter predicate (validated by the StreamFilter zod schema in the app
+  /// layer before persistence). Stored as JSON so the predicate surface can
+  /// evolve without a migration.
+  filter Json @default("{}")
+
+  // ── Webhook sink config ──────────────────────────────────────────────────
+  url           String?
+  /// Hex-encoded HMAC signing secret. The subscriber verifies every delivery
+  /// using this secret. Rotation issues a new secret + key id.
+  signingSecret String  @map("signing_secret")
+  signingKeyId  String  @map("signing_key_id")
+
+  // ── Kafka sink config ────────────────────────────────────────────────────
+  kafkaTopic String? @map("kafka_topic")
+
+  // ── Health / stats ───────────────────────────────────────────────────────
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  disabledAt          DateTime? @map("disabled_at")
+  matchedTotal        BigInt    @default(0) @map("matched_total")
+  lastMatchedAt       DateTime? @map("last_matched_at")
+  lastDeliveredAt     DateTime? @map("last_delivered_at")
+  lastAttemptedAt     DateTime? @map("last_attempted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  deliveries StreamDelivery[]
+
+  @@index([orgId, status])
+  @@index([status])
+  @@map("streams")
+}
+
+model StreamDelivery {
+  id       String               @id @map("id")
+  streamId String               @map("stream_id")
+  /// NATS subject (e.g. `salychain.chain.base.transfer_observed`).
+  subject  String
+  /// Idempotency key — `event_id` from the source event.
+  eventId  String               @map("event_id")
+  payload  Json
+  attempts Int                  @default(0)
+  status   StreamDeliveryStatus @default(PENDING)
+
+  lastStatusCode      Int?      @map("last_status_code")
+  lastResponseExcerpt String?   @map("last_response_excerpt")
+  lastLatencyMs       Int?      @map("last_latency_ms")
+  lastError           String?   @map("last_error")
+  nextAttemptAt       DateTime? @map("next_attempt_at")
+  succeededAt         DateTime? @map("succeeded_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  stream Stream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  @@unique([streamId, eventId])
+  @@index([status, nextAttemptAt])
+  @@index([streamId, createdAt])
+  @@map("stream_deliveries")
+}
+
+model StreamDeadLetter {
+  id             String   @id @map("id")
+  deliveryId     String   @unique @map("delivery_id")
+  streamId       String   @map("stream_id")
+  subject        String
+  eventId        String   @map("event_id")
+  payload        Json
+  attempts       Int
+  lastStatusCode Int?     @map("last_status_code")
+  lastError      String?  @map("last_error")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([streamId, createdAt])
+  @@map("stream_dead_letters")
+}

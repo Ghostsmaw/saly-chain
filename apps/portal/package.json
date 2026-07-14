@@ -1,0 +1,38 @@
+{
+  "name": "@salychain/app-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SalyChain Developer Portal — API keys, webhooks, request logs, docs",
+  "type": "module",
+  "scripts": {
+    "dev": "WATCHPACK_POLLING=true next dev -p 3003",
+    "build": "next build",
+    "start": "next start -p 3003",
+    "lint": "next lint",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf .next .turbo"
+  },
+  "dependencies": {
+    "@salychain/sdk-internal": "workspace:*",
+    "@salychain/ui": "workspace:*",
+    "@salychain/vertical-core": "workspace:*",
+    "@tanstack/react-query": "^5.59.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.451.0",
+    "next": "15.0.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tailwind-merge": "^2.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.12.0",
+    "eslint-config-next": "15.0.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2"
+  }
+}

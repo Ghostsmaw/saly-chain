@@ -1,0 +1,17 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.24"
+optimizer = true
+optimizer_runs = 1_000_000
+via_ir = true
+fuzz = { runs = 256 }
+evm_version = "paris"
+remappings = [
+  "@openzeppelin/=lib/openzeppelin-contracts/",
+  "forge-std/=lib/forge-std/src/"
+]
+
+[rpc_endpoints]
+saly-l3 = "${L3_L3_RPC_URL}"

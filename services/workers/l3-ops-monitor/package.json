@@ -1,0 +1,27 @@
+{
+  "name": "@salychain/worker-l3-ops-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "L3 production ops monitor — RPC pool, Conductor HA, settlement proposal age",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@salychain/chain-l3": "workspace:*",
+    "@salychain/config": "workspace:*",
+    "@salychain/logger": "workspace:*",
+    "@salychain/observability": "workspace:*",
+    "viem": "^2.21.19",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}

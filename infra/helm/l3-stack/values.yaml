@@ -1,0 +1,48 @@
+# L3 production stack — OP-Stack stateful + SalyChain RPC gateway worker.
+# OP images are official Optimism releases; gateway uses ghcr.io/salychain/worker-l3-rpc-gateway.
+
+global:
+  imageRegistry: ghcr.io/salychain
+  tag: stable
+
+opStack:
+  enabled: true
+  geth:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101411.4
+    sequencerReplicas: 1
+    readReplicas: 2
+  node:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.11.2
+    replicas: 2
+  conductor:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-conductor:v0.0.0
+    replicas: 3
+  batcher:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-batcher:v1.11.2
+  proposer:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-proposer:v1.11.2
+
+rpcGateway:
+  enabled: true
+  replicas: 3
+  port: 9520
+  metricsPort: 9105
+  rateLimitPerMin: 600
+  upstreamUrls: "http://l3-geth-replica-0:8545,http://l3-geth-replica-1:8545"
+
+opsMonitor:
+  enabled: true
+  replicas: 1
+  healthPort: 9106
+  metricsPort: 9107
+
+l3:
+  network: saly-mainnet
+  settlementMode: fault_proofs
+  chainId: 845320003
+
+ingress:
+  enabled: true
+  host: l3-rpc.salychain.io
+  className: nginx
+  tls: true

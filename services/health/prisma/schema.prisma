@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model EventOutbox {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String       @unique @map("event_id")
+  subject     String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  publishedAt DateTime?    @map("published_at")
+
+  @@index([status, createdAt])
+  @@map("event_outbox")
+}
+
+enum ConsentStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum ClaimStatus {
+  SUBMITTED
+  ADJUDICATED
+  SETTLED
+  DISPUTED
+  REFUNDED
+}
+
+model Provider {
+  id        String   @id @map("id")
+  orgId     String   @map("org_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  claims Claim[]
+
+  @@index([orgId])
+  @@map("providers")
+}
+
+model Payer {
+  id        String   @id @map("id")
+  orgId     String   @map("org_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  claims Claim[]
+
+  @@index([orgId])
+  @@map("payers")
+}
+
+model Patient {
+  id          String   @id @map("id")
+  orgId       String   @map("org_id")
+  subjectHash String   @map("subject_hash")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  consents Consent[]
+
+  @@unique([orgId, subjectHash])
+  @@map("patients")
+}
+
+model Consent {
+  id            String        @id @map("id")
+  orgId         String        @map("org_id")
+  patientId     String        @map("patient_id")
+  scope         String
+  expiresAt     DateTime?     @map("expires_at")
+  status        ConsentStatus @default(ACTIVE)
+  attestationId String?       @map("attestation_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([orgId, patientId])
+  @@map("consents")
+}
+
+model Claim {
+  id             String      @id @map("id")
+  orgId          String      @map("org_id")
+  providerId     String      @map("provider_id")
+  payerId        String      @map("payer_id")
+  procedureCode  String      @map("procedure_code")
+  amountMinor    BigInt      @map("amount_minor")
+  currency       String      @db.VarChar(8)
+  status         ClaimStatus @default(SUBMITTED)
+  escrowIntentId String?     @map("escrow_intent_id")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  provider Provider @relation(fields: [providerId], references: [id])
+  payer    Payer    @relation(fields: [payerId], references: [id])
+
+  @@index([orgId, status])
+  @@map("claims")
+}
+
+model RecordAttestation {
+  id            String   @id @map("id")
+  orgId         String   @map("org_id")
+  patientId     String   @map("patient_id")
+  dataHash      String   @map("data_hash")
+  attestationId String   @map("attestation_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, patientId])
+  @@map("record_attestations")
+}

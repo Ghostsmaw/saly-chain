@@ -1,0 +1,6 @@
+out/
+cache/
+broadcast/
+.env
+# Note: lib/ is vendored (copied from contracts/token/lib) so this workspace is
+# self-contained and builds offline + in CI without `forge install`.

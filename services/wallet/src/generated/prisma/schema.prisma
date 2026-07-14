@@ -1,0 +1,159 @@
+// =============================================================================
+// SalyChain Wallet Service — Prisma schema
+//
+// Stores custodial wallet metadata only. Private key material lives behind the
+// signer service (see ADR-0005). Each wallet has a policy that the signer
+// evaluates before authorizing any signature.
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  output          = "../src/generated/prisma"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto]
+}
+
+enum Chain {
+  BASE
+  XRPL
+  ETHEREUM
+  POLYGON
+  INTERNAL
+  SALY_L3
+}
+
+enum WalletStatus {
+  PROVISIONING
+  ACTIVE
+  FROZEN
+  ARCHIVED
+}
+
+enum WalletKind {
+  USER_CUSTODIAL
+  BUSINESS_CUSTODIAL
+  AGENT_CUSTODIAL
+  TREASURY
+  HOT_OPERATIONAL
+  FEE_COLLECTION
+}
+
+model Wallet {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  chain           Chain
+  address         String
+  kind            WalletKind
+  status          WalletStatus @default(PROVISIONING)
+  ownerId         String?      @map("owner_id")
+  ownerKind       String?      @map("owner_kind")
+  label           String?
+  /// Reference to the key material held by the signer service (e.g. KMS key ARN
+  /// or MPC wallet id). Never the key itself.
+  signerKeyRef    String       @map("signer_key_ref")
+  ledgerAccountId String?      @map("ledger_account_id") @db.Uuid
+  metadata        Json?
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  policy WalletPolicy?
+
+  @@unique([chain, address])
+  @@index([ownerKind, ownerId])
+  @@map("wallets")
+}
+
+model WalletPolicy {
+  walletId               String   @id @map("wallet_id") @db.Uuid
+  /// JSON array of allowlisted destinations: chain + address (or "*").
+  destinationAllowlist   Json     @map("destination_allowlist")
+  /// JSON array of trusted IOU issuers: `CURRENCY:issuerAddress` or `*`.
+  trustedIssuerAllowlist Json     @default("[]") @map("trusted_issuer_allowlist")
+  /// Per-transaction cap in minor units of the wallet's native asset.
+  perTxCapMinor          BigInt   @map("per_tx_cap_minor")
+  /// 24h rolling cap in minor units.
+  dailyCapMinor          BigInt   @map("daily_cap_minor")
+  /// Required approvers above the threshold (0 means no manual approval).
+  approvalThresholdMinor BigInt   @map("approval_threshold_minor")
+  requiredApprovers      Int      @default(0) @map("required_approvers")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("wallet_policies")
+}
+
+enum BroadcastJobKind {
+  TRANSFER
+  ESCROW_FUND
+  DEX_SWAP
+  BRIDGE_DEPOSIT
+  BRIDGE_WITHDRAW
+  SALYSD_MINT
+  SALYSD_REDEEM
+  SALYSD_APPROVE
+  SALYSD_ORACLE_UPDATE
+  CONTRACT_CALL
+}
+
+model BroadcastJob {
+  id                  String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Caller-supplied idempotency key. Unique per wallet (a wallet can't have two
+  /// outstanding broadcasts under the same key — replays return the existing job).
+  idempotencyKey      String             @map("idempotency_key")
+  walletId            String             @map("wallet_id") @db.Uuid
+  chain               Chain
+  kind                BroadcastJobKind   @default(TRANSFER)
+  /// Destination address (EVM hex or XRPL classic-address). For escrow, this is the payee.
+  destinationAddress  String             @map("destination_address")
+  /// Amount in minor units of `asset`.
+  amountMinor         BigInt             @map("amount_minor")
+  asset               String             @db.VarChar(16)
+  /// XRPL IOU issuer classic address (USD/EUR/etc.). Null for native XRP.
+  iouIssuer           String?            @map("iou_issuer") @db.VarChar(42)
+  /// XRPL destination tag for hosted-wallet deposits.
+  destinationTag      Int?               @map("destination_tag")
+  memo                String?
+  /// Correlates agent spend approvals when signing high-value transfers.
+  intentId            String?            @map("intent_id")
+  /// On-chain escrow deal id (bytes32 hex). Set for ESCROW_FUND jobs.
+  dealId              String?            @map("deal_id") @db.VarChar(66)
+  escrowContract      String?            @map("escrow_contract")
+  escrowDeadline      BigInt?            @map("escrow_deadline")
+  /// Uniswap V3 swap calldata bundle — set for DEX_SWAP jobs.
+  swapPayload         Json?              @map("swap_payload")
+  /// OP-Stack bridge calldata bundle — set for BRIDGE_* jobs.
+  bridgePayload       Json?              @map("bridge_payload")
+  /// SalySD mint/burn/approve bundle — set for SALYSD_* jobs.
+  salysdPayload       Json?              @map("salysd_payload")
+  /// Generic contract call — set for CONTRACT_CALL jobs.
+  contractCallPayload Json?              @map("contract_call_payload")
+  /// Populated after the signer returns. Null until signed.
+  rawTx               String?            @map("raw_tx")
+  /// Populated after a successful broadcast. Unique across the namespace.
+  txHash              String?            @unique @map("tx_hash")
+  /// Block number at which this job's tx was first observed mined.
+  confirmedAtBlock    BigInt?            @map("confirmed_at_block")
+  status              BroadcastJobStatus @default(PENDING)
+  attempts            Int                @default(0)
+  lastError           String?            @map("last_error")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+
+  @@unique([walletId, idempotencyKey])
+  @@index([walletId, createdAt])
+  @@index([status])
+  @@index([dealId])
+  @@map("broadcast_jobs")
+}
+
+enum BroadcastJobStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  FAILED
+}

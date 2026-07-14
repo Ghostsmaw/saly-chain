@@ -1,0 +1,67 @@
+# syntax=docker/dockerfile:1.7
+# =============================================================================
+# Generic multi-stage image for any SalyChain Node service or worker.
+#
+# Build it once per deployable by passing the workspace package name + its dir:
+#
+#   docker build -f infra/docker/Dockerfile.node \
+#     --build-arg PACKAGE=@salychain/service-agents \
+#     --build-arg WORKDIR=services/agents \
+#     -t ghcr.io/salychain/service-agents:$TAG .
+#
+# Strategy: `turbo prune` produces a focused subset (only the target package and
+# its workspace deps), so the install + final image stay small and cache well.
+# =============================================================================
+ARG NODE_VERSION=20.18-alpine
+
+# --- base: pnpm + native libs prisma/openssl need on musl ---------------------
+FROM node:${NODE_VERSION} AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
+RUN apk add --no-cache libc6-compat openssl
+WORKDIR /app
+
+# --- pruner: carve the monorepo down to the target package -------------------
+FROM base AS pruner
+ARG PACKAGE
+RUN pnpm add -g turbo@2.1.3
+COPY . .
+RUN turbo prune "${PACKAGE}" --docker
+
+# --- builder: install deps, generate prisma clients, compile -----------------
+FROM base AS builder
+ARG PACKAGE
+ARG WORKDIR
+# Placeholder so `prisma generate` never trips on an unset datasource env.
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
+# 1) lockfile + manifests → deterministic, cacheable install layer
+COPY --from=pruner /app/out/json/ ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+# 2) full pruned source
+COPY --from=pruner /app/out/full/ ./
+# 3) regenerate prisma clients for the musl runtime (any package that has a schema)
+RUN pnpm -r exec sh -c 'test -f prisma/schema.prisma && prisma generate || true'
+# 4) build only the target package (+ its deps) via turbo
+RUN pnpm turbo run build --filter="${PACKAGE}"
+# 5) workers compile with tsc which doesn't copy the generated prisma JS into
+#    dist; nest copies it via assets. Make both cases correct.
+RUN if [ -d "${WORKDIR}/src/generated" ] && [ ! -d "${WORKDIR}/dist/generated" ]; then \
+      cp -r "${WORKDIR}/src/generated" "${WORKDIR}/dist/generated"; \
+    fi
+# 6) drop dev dependencies to slim the runtime image
+RUN pnpm prune --prod
+
+# --- runner: minimal, non-root, signal-correct -------------------------------
+FROM node:${NODE_VERSION} AS runner
+ARG WORKDIR
+RUN apk add --no-cache openssl tini
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=builder /app ./
+# Default app port; override per deployment.
+ENV PORT=4000
+WORKDIR /app/${WORKDIR}
+USER node
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/main.js"]

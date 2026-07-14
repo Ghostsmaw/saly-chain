@@ -1,0 +1,167 @@
+groups:
+  - name: salychain-platform
+    rules:
+      # --- Liveness ---------------------------------------------------------
+      - alert: ServiceDown
+        expr: up{job=~"salychain-.*"} == 0
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "Service {{ $labels.instance }} is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} ({{ $labels.job }}) for >1m."
+
+      # --- HTTP error budget ------------------------------------------------
+      - alert: HighHttp5xxRate
+        expr: |
+          sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))
+            / sum by (service) (rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "High 5xx rate on {{ $labels.service }}"
+          description: "{{ $labels.service }} is serving >5% 5xx responses over 5m."
+
+      - alert: HighRequestLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "p95 latency >2s on {{ $labels.service }}"
+          description: "95th percentile request latency above 2s for 10m."
+
+  - name: salychain-money
+    rules:
+      # --- Ledger integrity (highest stakes) --------------------------------
+      - alert: LedgerImbalanceDetected
+        expr: increase(salychain_ledger_imbalance_detected_total[5m]) > 0
+        for: 0m
+        labels: { severity: page }
+        annotations:
+          summary: "Ledger double-entry imbalance detected"
+          description: "A journal entry violated the debits==credits invariant. Investigate immediately — money integrity."
+
+      # --- Custody ----------------------------------------------------------
+      - alert: SignerErrorRateHigh
+        expr: |
+          sum(rate(salychain_signer_sign_total{outcome="error"}[5m]))
+            / clamp_min(sum(rate(salychain_signer_sign_total[5m])), 1) > 0.01
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Signer error rate >1%"
+          description: "Signing operations are failing — custody/KMS path degraded."
+
+      - alert: SignerDenialSpike
+        expr: increase(salychain_signer_sign_total{outcome="denied"}[10m]) > 20
+        for: 0m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Spike in signer policy denials"
+          description: "Unusual volume of policy-denied sign requests — possible misconfig or attack."
+
+      # --- Settlement health ------------------------------------------------
+      - alert: ChainListenerLagHigh
+        expr: salychain_chain_listener_lag_blocks > 50
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Chain listener {{ $labels.chain }} lagging >50 blocks"
+          description: "Settlement confirmations are delayed; listener is falling behind head."
+
+      - alert: SettlementStalled
+        expr: |
+          (sum(increase(salychain_tx_state_transitions_total{state="EXECUTING"}[15m])) > 0)
+          and (sum(increase(salychain_tx_state_transitions_total{state="SETTLED"}[15m])) == 0)
+        for: 15m
+        labels: { severity: page }
+        annotations:
+          summary: "Transactions executing but none settling"
+          description: "No SETTLED transitions in 15m while transactions are EXECUTING — settlement pipeline stalled."
+
+  - name: salychain-l3-production
+    rules:
+      - alert: L3ConductorNoLeader
+        expr: salychain_l3_conductor_has_leader == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "L3 Conductor cluster has no leader"
+          description: "Raft leader election failed — sequencer HA degraded; only manual failover safe."
+
+      - alert: L3RpcPoolLagHigh
+        expr: salychain_l3_rpc_pool_lag_blocks > 5
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "L3 RPC replica lag >5 blocks"
+          description: "Read replica pool is drifting from sequencer head — check replica sync."
+
+      - alert: L3SettlementProposalStalled
+        expr: salychain_l3_settlement_proposal_age_seconds > 3600
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "No L3 settlement proposal for >1h"
+          description: "Proposer or fault-proof game creation may be stalled — check batcher/proposer on Base."
+
+      - alert: L3RpcGatewayUnhealthy
+        expr: salychain_l3_rpc_upstream_healthy == 0
+        for: 3m
+        labels: { severity: page }
+        annotations:
+          summary: "L3 RPC gateway has no healthy upstreams"
+          description: "Public L3 JSON-RPC fleet cannot serve traffic — all upstream replicas down or syncing."
+
+      - alert: L3SequencerLagHigh
+        expr: salychain_l3_sequencer_lag_blocks > 10
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "L3 sequencer lag >10 blocks"
+          description: "Execution layer falling behind — inspect batcher, L1 DA, or conductor leader."
+
+  - name: salychain-stablecoin
+    rules:
+      - alert: StablecoinSupplyDrift
+        expr: salychain_stablecoin_supply_drift_minor < 0
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "SalySD under-collateralized (supply exceeds reserves)"
+          description: "On-chain SalySD supply exceeds attested reserves — investigate PoR pipeline and halt mints."
+
+      - alert: StablecoinAttestationStale
+        expr: salychain_stablecoin_attestation_age_seconds > 86400
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Reserve attestation older than 24h"
+          description: "PoR attestation has not refreshed in >24h — check stablecoin-por worker."
+
+      - alert: StablecoinPorWorkerErrors
+        expr: increase(salychain_stablecoin_por_runs_total{outcome="error"}[30m]) > 2
+        for: 0m
+        labels: { severity: ticket }
+        annotations:
+          summary: "PoR worker failing repeatedly"
+          description: "stablecoin-por worker recorded multiple error outcomes in 30m."
+
+  - name: salychain-integrations
+    rules:
+      - alert: StubProviderUsedInProd
+        expr: increase(salychain_quote_stub_fallback_total[10m]) > 0
+        for: 0m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Stub FX/DEX provider used"
+          description: "A quote was served by a stub provider. In production this must be zero (fail-closed)."
+
+      - alert: WebhookDeliveryFailuresHigh
+        expr: rate(salychain_webhook_delivery_failures_total[5m]) > 0.5
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Elevated webhook delivery failures"
+          description: "Partner webhook deliveries are failing; check subscriber health / DLQ growth."

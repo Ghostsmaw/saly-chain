@@ -1,0 +1,6 @@
+# Production secrets — never commit
+.env
+deployments.base-mainnet.json
+artifacts/
+*.key
+*.pem

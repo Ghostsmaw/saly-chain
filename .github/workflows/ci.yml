@@ -1,0 +1,266 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  LOG_LEVEL: warn
+  PNPM_VERSION: '9.12.0'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint, format, typecheck, unit tests (the fast feedback gate)
+  # ---------------------------------------------------------------------------
+  quality:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: salychain
+          POSTGRES_PASSWORD: salychain
+          POSTGRES_DB: salychain
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U salychain -d salychain"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Initialize databases
+        run: |
+          PGPASSWORD=salychain psql -h localhost -p 5433 -U salychain -d salychain -f infra/docker/postgres/init/00-databases.sql
+
+      - name: Generate Prisma clients
+        run: pnpm db:generate
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit & integration tests
+        run: pnpm test
+
+  # ---------------------------------------------------------------------------
+  # Smart contracts (Foundry): formatting + tests for every contract package
+  # ---------------------------------------------------------------------------
+  contracts:
+    name: Contracts (Foundry)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: forge fmt --check
+        run: |
+          for dir in contracts/escrow contracts/token contracts/l3-usdc contracts/salysd contracts/governance contracts/registry; do
+            echo "→ $dir"
+            (cd "$dir" && forge fmt --check)
+          done
+
+      - name: forge test
+        run: |
+          ln -sfn ../l3-usdc/lib contracts/salysd/lib
+          ln -sfn ../l3-usdc/lib contracts/governance/lib
+          ln -sfn ../l3-usdc/lib contracts/registry/lib
+          for dir in contracts/escrow contracts/token contracts/l3-usdc contracts/salysd contracts/governance contracts/registry; do
+            echo "→ $dir"
+            (cd "$dir" && forge test -vvv)
+          done
+
+  # ---------------------------------------------------------------------------
+  # Full migration apply across every per-service database
+  # ---------------------------------------------------------------------------
+  migrate:
+    name: Prisma migrate deploy (all databases)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: salychain
+          POSTGRES_PASSWORD: salychain
+          POSTGRES_DB: salychain
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U salychain -d salychain"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Initialize databases
+        run: |
+          PGPASSWORD=salychain psql -h localhost -p 5433 -U salychain -d salychain -f infra/docker/postgres/init/00-databases.sql
+
+      - name: Generate Prisma clients
+        run: pnpm db:generate
+
+      - name: Apply migrations to every database
+        run: |
+          set -euo pipefail
+          base="postgresql://salychain:salychain@localhost:5433"
+          declare -A DBS=(
+            [@salychain/service-ledger]=salychain_ledger
+            [@salychain/service-wallet]=salychain_wallet
+            [@salychain/service-signer]=salychain_signer
+            [@salychain/service-execution]=salychain_execution
+            [@salychain/service-intent]=salychain_intent
+            [@salychain/service-routing]=salychain_routing
+            [@salychain/service-liquidity]=salychain_liquidity
+            [@salychain/service-compliance]=salychain_compliance
+            [@salychain/service-risk]=salychain_risk
+            [@salychain/service-webhooks]=salychain_webhook
+            [@salychain/service-analytics-datastreams]=salychain_datastreams
+            [@salychain/service-analytics-datashares]=salychain_datashares
+            [@salychain/service-analytics-intelligence]=salychain_intelligence
+            [@salychain/service-merchant]=salychain_merchant
+            [@salychain/service-stablecoin]=salychain_stablecoin
+            [@salychain/service-gateway]=salychain_gateway
+            [@salychain/service-apikeys]=salychain_apikeys
+            [@salychain/service-agents]=salychain_agents
+            [@salychain/service-identity]=salychain_identity
+            [@salychain/service-contract-registry]=salychain_contract_registry
+            [@salychain/service-admin]=salychain_admin
+            [@salychain/worker-fiat-listener]=salychain_fiat_listener
+            [@salychain/worker-analytics-indexer]=salychain_analytics_indexer
+          )
+          for filter in "${!DBS[@]}"; do
+            db="${DBS[$filter]}"
+            echo "→ $filter ($db)"
+            DATABASE_URL="${base}/${db}?schema=public" pnpm --filter "$filter" prisma:deploy
+          done
+
+  # ---------------------------------------------------------------------------
+  # Security: secret scanning, dependency audit, filesystem CVE scan
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Dependency audit (high+)
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Filesystem vulnerability scan (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+  # ---------------------------------------------------------------------------
+  # Helm chart + Dockerfile build sanity (no push on CI)
+  # ---------------------------------------------------------------------------
+  manifests:
+    name: Helm lint + chart render
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Helm lint
+        run: helm lint infra/helm/salychain
+
+      - name: Render (default, staging, prod)
+        run: |
+          helm template salychain infra/helm/salychain >/dev/null
+          helm template salychain infra/helm/salychain -f infra/helm/salychain/values.yaml -f infra/helm/salychain/values-staging.yaml >/dev/null
+          helm template salychain infra/helm/salychain -f infra/helm/salychain/values.yaml -f infra/helm/salychain/values-prod.yaml >/dev/null

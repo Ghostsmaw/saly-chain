@@ -1,0 +1,264 @@
+name: salychain
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: salychain-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: salychain
+      POSTGRES_PASSWORD: salychain
+      POSTGRES_DB: salychain
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U salychain -d salychain"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: salychain-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: salychain-nats
+    restart: unless-stopped
+    command:
+      [
+        "-js",
+        "-sd",
+        "/data",
+        "-m",
+        "8222",
+        "--name",
+        "salychain-nats-dev",
+      ]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: salychain-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: salychain
+      MINIO_ROOT_PASSWORD: salychain-dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: salychain-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: salychain
+      CLICKHOUSE_PASSWORD: salychain
+      CLICKHOUSE_DB: salychain_analytics
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8123:8123" # HTTP interface (used by @clickhouse/client)
+      - "9009:9000" # native protocol (host 9009 to avoid clashing with MinIO 9000)
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  redpanda:
+    # Kafka-compatible broker for Saly Datastreams (B6) + high-volume transport.
+    image: redpandadata/redpanda:v24.2.7
+    container_name: salychain-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+    ports:
+      - "9092:9092" # Kafka API
+      - "9644:9644" # Admin API
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nessie:
+    # Iceberg REST catalog for the analytics lakehouse (B5).
+    # Quay mirror — ghcr.io often fails DNS inside Docker Desktop on some networks.
+    image: quay.io/projectnessie/nessie:0.108.1
+    container_name: salychain-nessie
+    restart: unless-stopped
+    environment:
+      NESSIE_VERSION_STORE_TYPE: IN_MEMORY
+      QUARKUS_HTTP_PORT: 19120
+    ports:
+      - "19120:19120"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19120/api/v2/trees"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  trino:
+    image: trinodb/trino:453
+    container_name: salychain-trino
+    restart: unless-stopped
+    ports:
+      - "8088:8080"
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog:ro
+      - ./trino/config.properties:/etc/trino/config.properties:ro
+    depends_on:
+      - minio
+      - nessie
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: salychain-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 salychain salychain-dev &&
+      mc mb --ignore-existing local/salychain-lake &&
+      mc anonymous set download local/salychain-lake || true
+      "
+    restart: "no"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.110.0
+    container_name: salychain-otel
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel/config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    depends_on:
+      - prometheus
+      - loki
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: salychain-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-remote-write-receiver"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: salychain-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: salychain-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - loki
+
+  mailhog:
+    # Mailpit: actively-maintained, native arm64 drop-in for MailHog.
+    # Same SMTP (1025) and web UI (8025) endpoints — no app config changes needed.
+    image: axllent/mailpit:latest
+    container_name: salychain-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  nats_data:
+  minio_data:
+  clickhouse_data:
+  redpanda_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:

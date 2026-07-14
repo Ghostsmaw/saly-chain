@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    // Incremental builds are safe because Nest services set
+    // `deleteOutDir: false` (see each service's nest-cli.json). Previously
+    // `deleteOutDir: true` wiped `dist` but left the sibling `*.tsbuildinfo`,
+    // so a stale buildinfo convinced tsc the (now-deleted) `.js` was current,
+    // it skipped emit, and `node dist/main` failed. With the output dir no
+    // longer wiped, `dist` and the buildinfo stay in sync, so we keep
+    // incremental on for fast watch rebuilds.
+    "incremental": true,
+    "composite": false
+  },
+  "exclude": ["node_modules", "dist", ".next", "coverage"]
+}

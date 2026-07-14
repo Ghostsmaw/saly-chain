@@ -1,0 +1,88 @@
+{{- $ctx := . }}
+{{- range .Values.services }}
+{{- $name := .name }}
+{{- $port := .port }}
+{{- $health := default "/v1/health" .health }}
+{{- $replicas := default $ctx.Values.defaults.replicas .replicas }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $ctx.Release.Name }}-svc-{{ $name }}
+  labels:
+    {{- include "salychain.labels" $ctx | nindent 4 }}
+    {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "service") | nindent 4 }}
+spec:
+  replicas: {{ $replicas }}
+  revisionHistoryLimit: {{ $ctx.Values.defaults.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "service") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "service") | nindent 8 }}
+      annotations:
+        {{- toYaml $ctx.Values.podAnnotations | nindent 8 }}
+        prometheus.io/port: {{ $port | quote }}
+    spec:
+      serviceAccountName: {{ include "salychain.serviceAccountName" $ctx }}
+      {{- with $ctx.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $ctx.Values.global.image.registry }}/service-{{ $name }}:{{ $ctx.Values.global.image.tag }}"
+          imagePullPolicy: {{ $ctx.Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $port }}
+          env:
+            - name: PORT
+              value: {{ $port | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ $name | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ $ctx.Release.Name }}-shared-env
+            - secretRef:
+                name: {{ $ctx.Release.Name }}-{{ $name }}-env
+                optional: true
+          livenessProbe:
+            httpGet:
+              path: {{ $health }}
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: {{ $health }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml $ctx.Values.defaults.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml $ctx.Values.defaults.securityContext | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "salychain.labels" $ctx | nindent 4 }}
+    {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "service") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "service") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $port }}
+      targetPort: http
+{{- end }}

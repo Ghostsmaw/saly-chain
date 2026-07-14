@@ -1,0 +1,20 @@
+{
+  "network": "saly-mainnet",
+  "settlement": "base-mainnet",
+  "chain_id": 845320003,
+  "settlement_chain_id": 8453,
+  "deployed_at": "REPLACE_AFTER_DEPLOY",
+  "l3_rpc_url": "https://l3-rpc.salychain.io",
+  "settlement_rpc_url": "https://mainnet.base.org",
+  "contracts": {
+    "disputeGameFactory": "0x0000000000000000000000000000000000000000",
+    "batchInbox": "0x0000000000000000000000000000000000000000",
+    "optimismPortal": "0x0000000000000000000000000000000000000000",
+    "l1StandardBridge": "0x0000000000000000000000000000000000000000",
+    "l2StandardBridge": "0x0000000000000000000000000000000000000000"
+  },
+  "assets": {
+    "SalySD": "0x0000000000000000000000000000000000000000"
+  },
+  "notes": "Copy to deployments.base-mainnet.json after op-deployer apply (fault-proof mode). KMS keys for batcher/proposer — never commit secrets."
+}

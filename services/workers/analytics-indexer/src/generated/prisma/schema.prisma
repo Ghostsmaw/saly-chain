@@ -1,0 +1,19 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AnalyticsIndexerCheckpoint {
+  chainKey         String   @id @map("chain_key")
+  lastPosition     BigInt   @map("last_position")
+  lastBlockHash    String   @map("last_block_hash")
+  backfillComplete Boolean  @default(false) @map("backfill_complete")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("analytics_indexer_checkpoints")
+}

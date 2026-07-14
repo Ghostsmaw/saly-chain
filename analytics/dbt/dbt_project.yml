@@ -1,0 +1,38 @@
+name: "saly_analytics"
+version: "0.1.0"
+config-version: 2
+
+# Connection profile (see profiles.example.yml). Override locally / in CI.
+profile: "saly_analytics"
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Layered modeling: staging = thin deduplicated views over raw ClickHouse tables;
+# marts = curated, materialized tables (lineage, rail_economics, ...).
+# All objects live in the profile's database (salychain_analytics) — we don't
+# fan out into per-layer ClickHouse databases.
+models:
+  saly_analytics:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  saly_analytics:
+    address_labels:
+      +column_types:
+        chain_id: String
+        address: String
+        label: String
+        category: String

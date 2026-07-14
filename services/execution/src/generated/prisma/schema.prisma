@@ -1,0 +1,256 @@
+// =============================================================================
+// SalyChain Execution Service — Prisma schema
+//
+// The execution service owns the business-level transaction state and its
+// audit trail. It does NOT own monetary truth (the ledger does) or key
+// material (the signer does). It is the orchestrator + state machine.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ExecutionTransactionKind {
+  INTERNAL_TRANSFER
+  BASE_PAYOUT
+  XRPL_PAYOUT
+  L3_PAYOUT
+  ESCROW_PAYOUT
+  PAYROLL_BATCH
+  FIAT_PAYOUT
+  FIAT_PAYIN
+  SWAP
+  TOPUP
+  DEX_SWAP
+  BRIDGE_DEPOSIT
+  BRIDGE_WITHDRAW
+  SALYSD_MINT
+  SALYSD_REDEEM
+}
+
+enum ExecutionTransactionState {
+  CREATED
+  SCREENED
+  ROUTED
+  QUOTED
+  RESERVED
+  EXECUTING
+  AWAITING_APPROVAL
+  AWAITING_CONFIRMATION
+  SETTLED
+  FAILED
+  REVERSING
+  REVERSED
+  REJECTED
+}
+
+model ExecutionTransaction {
+  id             String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  idempotencyKey String                    @unique @map("idempotency_key")
+  kind           ExecutionTransactionKind
+  state          ExecutionTransactionState @default(CREATED)
+
+  // Source (one of wallet or account is set, depending on kind).
+  sourceWalletId  String? @map("source_wallet_id")
+  sourceAccountId String? @map("source_account_id")
+  amountMinor     BigInt  @map("amount_minor")
+  currency        String  @db.VarChar(8)
+
+  // Destination.
+  destinationWalletId  String? @map("destination_wallet_id")
+  destinationAccountId String? @map("destination_account_id")
+  destinationAddress   String? @map("destination_address")
+  destinationChain     String? @map("destination_chain")
+  asset                String? @db.VarChar(16)
+
+  // Pointers to artifacts created during execution.
+  ledgerTransactionId String? @map("ledger_transaction_id")
+  ledgerEntryId       String? @map("ledger_entry_id")
+  reversalEntryId     String? @map("reversal_entry_id")
+  broadcastJobId      String? @map("broadcast_job_id")
+  txHash              String? @map("tx_hash")
+
+  intentId String? @map("intent_id")
+  /// Owning organization (tenant). Null for consumer/JWT-originated transactions.
+  orgId    String? @map("org_id")
+  memo     String?
+  metadata Json?
+  error    String?
+
+  // S2 — orchestration artifacts (purely audit; truth lives in source services).
+  routeDecisionId  String? @map("route_decision_id")
+  selectedRail     String? @map("selected_rail")
+  quoteId          String? @map("quote_id")
+  quoteSignature   String? @map("quote_signature")
+  riskAssessmentId String? @map("risk_assessment_id")
+  riskScore        Int?    @map("risk_score")
+  complianceRunId  String? @map("compliance_run_id")
+  complianceCaseId String? @map("compliance_case_id")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  settledAt DateTime? @map("settled_at")
+
+  events ExecutionTransactionEvent[]
+
+  @@index([state, createdAt])
+  @@index([kind, createdAt])
+  @@index([txHash])
+  @@index([orgId, createdAt])
+  @@map("execution_transactions")
+}
+
+model ExecutionTransactionEvent {
+  id            String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transactionId String                     @map("transaction_id") @db.Uuid
+  fromState     ExecutionTransactionState? @map("from_state")
+  toState       ExecutionTransactionState  @map("to_state")
+  reason        String?
+  detail        Json?
+  occurredAt    DateTime                   @default(now()) @map("occurred_at")
+
+  transaction ExecutionTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId, occurredAt])
+  @@map("execution_transaction_events")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+/// Transactional outbox. Domain events are written here in the SAME DB
+/// transaction as the state change they describe; a relay drains PENDING rows
+/// to NATS. This removes the dual-write hazard — events survive broker outages
+/// and process crashes. `eventId` is the JetStream msgID for at-least-once
+/// delivery with broker-side de-duplication.
+model EventOutbox {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String       @unique @map("event_id")
+  subject     String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  publishedAt DateTime?    @map("published_at")
+
+  @@index([status, createdAt])
+  @@map("event_outbox")
+}
+
+// Cursor for the NATS consumer that processes chain confirmations. Lets the
+// service resume cleanly after a restart without missing settled events.
+model ExecutionConsumerCursor {
+  consumerName String   @id @map("consumer_name")
+  lastEventId  String?  @map("last_event_id")
+  lastSeenAt   DateTime @updatedAt @map("last_seen_at")
+
+  @@map("execution_consumer_cursors")
+}
+
+enum EscrowDealStatus {
+  FUNDING
+  FUNDED
+  RELEASED
+  REFUNDED
+}
+
+enum EscrowResolution {
+  RELEASE
+  REFUND
+}
+
+/// Audit trail for on-chain SalyEscrow deals (indexed + operator actions).
+model EscrowDeal {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dealId         String            @unique @map("deal_id") @db.VarChar(66)
+  transactionId  String?           @map("transaction_id") @db.Uuid
+  status         EscrowDealStatus  @default(FUNDING)
+  payer          String            @db.VarChar(42)
+  payee          String            @db.VarChar(42)
+  token          String            @db.VarChar(42)
+  amountMinor    BigInt            @map("amount_minor")
+  deadline       BigInt
+  escrowContract String            @map("escrow_contract") @db.VarChar(42)
+  fundTxHash     String?           @map("fund_tx_hash")
+  resolveTxHash  String?           @map("resolve_tx_hash")
+  resolution     EscrowResolution?
+  condition      Json?
+  fundedAt       DateTime?         @map("funded_at")
+  resolvedAt     DateTime?         @map("resolved_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  events EscrowDealEvent[]
+
+  @@index([status, createdAt])
+  @@index([transactionId])
+  @@map("escrow_deals")
+}
+
+model EscrowDealEvent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dealRowId  String   @map("deal_row_id") @db.Uuid
+  type       String   @db.VarChar(32)
+  detail     Json?
+  txHash     String?  @map("tx_hash")
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  deal EscrowDeal @relation(fields: [dealRowId], references: [id], onDelete: Cascade)
+
+  @@index([dealRowId, occurredAt])
+  @@map("escrow_deal_events")
+}
+
+enum ReconciliationStatus {
+  OK
+  BREAKS_FOUND
+  ERROR
+}
+
+/// One execution of a reconciliation sweep (e.g. ledger↔fiat-pay-in rail).
+/// Provides an immutable, queryable audit trail for finance ops.
+model ReconciliationRun {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scope        String               @db.VarChar(48)
+  status       ReconciliationStatus @default(OK)
+  startedAt    DateTime             @default(now()) @map("started_at")
+  finishedAt   DateTime?            @map("finished_at")
+  checkedCount Int                  @default(0) @map("checked_count")
+  breakCount   Int                  @default(0) @map("break_count")
+  summary      Json?
+
+  breaks ReconciliationBreak[]
+
+  @@index([scope, startedAt])
+  @@map("reconciliation_runs")
+}
+
+/// A single discrepancy found during a reconciliation run. Breaks are durable
+/// so they can be triaged/resolved by ops without re-running the sweep.
+model ReconciliationBreak {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId         String   @map("run_id") @db.Uuid
+  kind          String   @db.VarChar(48)
+  reference     String?
+  currency      String?  @db.VarChar(8)
+  expectedMinor String?  @map("expected_minor")
+  actualMinor   String?  @map("actual_minor")
+  detail        Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  run ReconciliationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([kind, createdAt])
+  @@map("reconciliation_breaks")
+}

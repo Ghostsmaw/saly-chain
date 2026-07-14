@@ -1,0 +1,46 @@
+// =============================================================================
+// SalyChain Routing Service — Prisma schema
+//
+// `RouteDecision` is the persistent audit record for every routing call. It
+// captures the input snapshot, every candidate rail's evaluation, and the
+// final pick. This is the bedrock for regulator-grade explanations of
+// "why did this transaction go through Base USDC?".
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rail {
+  INTERNAL
+  BASE
+  XRPL
+  L3
+  FIAT
+  ESCROW
+}
+
+model RouteDecision {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  intentId        String?  @map("intent_id")
+  /// Free-form correlation id for non-intent callers.
+  correlationKey  String?  @map("correlation_key")
+  /// Input snapshot (sender + receiver + amount + currency + risk context).
+  input           Json
+  /// Per-rail evaluation results (cost, expected_seconds, score, reasons).
+  candidates      Json
+  selectedRail    Rail     @map("selected_rail")
+  selectedScore   Int      @map("selected_score")
+  /// Human-readable rationale recorded for analyst review.
+  rationale       String
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([selectedRail, createdAt])
+  @@map("route_decisions")
+}

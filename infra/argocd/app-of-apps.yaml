@@ -1,0 +1,25 @@
+# App-of-apps: a single Application that owns the per-environment Applications
+# committed under infra/argocd/applications. Point ArgoCD at this once and it
+# manages staging + prod releases declaratively (GitOps).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: salychain-bootstrap
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: salychain
+  source:
+    repoURL: https://github.com/salychain/salychain.git
+    targetRevision: main
+    path: infra/argocd/applications
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

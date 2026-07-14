@@ -1,0 +1,8 @@
+apiVersion: v2
+name: salychain
+description: SalyChain platform — services, workers, and web apps as a single umbrella release.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: SalyChain Platform Team

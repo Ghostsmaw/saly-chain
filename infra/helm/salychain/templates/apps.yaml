@@ -1,0 +1,82 @@
+{{- $ctx := . }}
+{{- range .Values.apps }}
+{{- $name := .name }}
+{{- $port := default 3000 .port }}
+{{- $replicas := default $ctx.Values.defaults.replicas .replicas }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $ctx.Release.Name }}-app-{{ $name }}
+  labels:
+    {{- include "salychain.labels" $ctx | nindent 4 }}
+    {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "web") | nindent 4 }}
+spec:
+  replicas: {{ $replicas }}
+  revisionHistoryLimit: {{ $ctx.Values.defaults.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "web") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "web") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "salychain.serviceAccountName" $ctx }}
+      {{- with $ctx.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $ctx.Values.global.image.registry }}/app-{{ $name }}:{{ $ctx.Values.global.image.tag }}"
+          imagePullPolicy: {{ $ctx.Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $port }}
+          env:
+            - name: PORT
+              value: {{ $port | quote }}
+            - name: HOSTNAME
+              value: "0.0.0.0"
+          envFrom:
+            - secretRef:
+                name: {{ $ctx.Release.Name }}-app-{{ $name }}-env
+                optional: true
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml $ctx.Values.defaults.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml $ctx.Values.defaults.securityContext | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-{{ $name }}
+  labels:
+    {{- include "salychain.labels" $ctx | nindent 4 }}
+    {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "web") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "salychain.selectorLabels" (dict "ctx" $ctx "name" $name "kind" "web") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $port }}
+      targetPort: http
+{{- end }}

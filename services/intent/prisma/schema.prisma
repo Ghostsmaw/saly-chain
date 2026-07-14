@@ -1,0 +1,73 @@
+// =============================================================================
+// SalyChain Intent Service — Prisma schema
+//
+// `IntentRecord` is the immutable record of every accepted intent. The payload
+// is the raw JSON the caller sent (post-validation), the state is the latest
+// known lifecycle state, and `executionTransactionId` links back to the
+// execution service's tx once it accepts the intent.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+/// Transactional outbox — domain events are written here atomically with the
+/// state change and a relay drains them to NATS at-least-once, de-duplicated on
+/// eventId. See @salychain/events OutboxRelay.
+model EventOutbox {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String       @unique @map("event_id")
+  subject     String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?      @map("last_error")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  publishedAt DateTime?    @map("published_at")
+
+  @@index([status, createdAt])
+  @@map("event_outbox")
+}
+
+enum IntentState {
+  RECEIVED       /// stored, not yet handed off
+  ACCEPTED       /// execution service accepted; intent is in flight
+  REJECTED       /// validation, screening, or execution refused the intent
+  COMPLETED      /// downstream execution settled
+  FAILED         /// downstream execution failed
+}
+
+model IntentRecord {
+  intentId              String       @id @map("intent_id")
+  /// Caller-supplied idempotency key, scoped per actor.
+  idempotencyKey        String       @map("idempotency_key")
+  actorRef              String       @map("actor_ref")
+  /// Owning organization (tenant). Null for consumer/JWT-originated intents.
+  orgId                 String?      @map("org_id")
+  channel               String
+  kind                  String
+  payload               Json
+  state                 IntentState  @default(RECEIVED)
+  executionTransactionId String?     @map("execution_transaction_id")
+  rejectionCode         String?      @map("rejection_code")
+  rejectionMessage      String?      @map("rejection_message")
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+
+  @@unique([actorRef, idempotencyKey])
+  @@index([state, createdAt])
+  @@index([orgId, createdAt])
+  @@map("intent_records")
+}
