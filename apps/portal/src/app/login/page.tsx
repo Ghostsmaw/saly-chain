@@ -1,4 +1,5 @@
 import { AuthLayout } from '@/components/AuthLayout';
+import { safeInternalPath } from '@/lib/session';
 import { LoginForm } from './LoginForm';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,7 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  const safeNext = next && next.startsWith('/') ? next : '/';
+  const safeNext = safeInternalPath(next);
 
   return (
     <AuthLayout

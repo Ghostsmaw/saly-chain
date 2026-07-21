@@ -17,7 +17,7 @@ Complete on-chain escrow lifecycle with operator API (replacing manual `cast sen
 | `ESCROW_CONTRACT_ADDRESS` | wallet, chain-listener | validate + index events |
 | `ESCROW_RESOLVER_WALLET_ID` | execution | signs release/refund |
 | `EXECUTION_ADMIN_TOKEN` | execution | admin escrow API auth |
-| `WALLET_INTERNAL_ADMIN_TOKEN` | wallet | internal resolve auth (same value recommended) |
+| `WALLET_INTERNAL_ADMIN_TOKEN` | wallet + execution | internal resolve auth — REQUIRED on wallet (endpoint disabled when unset); execution presents it (falls back to `EXECUTION_ADMIN_TOKEN`) |
 
 Resolver wallet policy must allow the **escrow contract address** in `destination_allowlist` (tx `to` = SalyEscrow).
 

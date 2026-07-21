@@ -116,6 +116,40 @@ export class BroadcastWorker implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // Serialize prepare→sign→broadcast per wallet so two concurrent jobs cannot
+    // pull the same pending nonce and double-spend / stuck-replace.
+    await this.withWalletLock(broadcast.walletId, async () => {
+      await this.dispatchLocked(broadcastJobId);
+    });
+  }
+
+  private async withWalletLock(walletId: string, fn: () => Promise<void>): Promise<void> {
+    const key = `wallet:nonce-lock:${walletId}`;
+    const token = ulid();
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const acquired = await this.redis.set(key, token, 'EX', 120, 'NX');
+      if (acquired) {
+        try {
+          await fn();
+        } finally {
+          const current = await this.redis.get(key);
+          if (current === token) await this.redis.del(key);
+        }
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    throw new Error(`timed out acquiring broadcast lock for wallet ${walletId}`);
+  }
+
+  private async dispatchLocked(broadcastJobId: string): Promise<void> {
+    // Re-read after lock: another worker may have submitted while we waited.
+    const broadcast = await this.prisma.broadcastJob.findUnique({ where: { id: broadcastJobId } });
+    if (!broadcast) return;
+    if (broadcast.status === 'CONFIRMED' || (broadcast.status === 'SUBMITTED' && broadcast.txHash)) {
+      return;
+    }
+
     const wallet = await this.prisma.wallet.findUnique({ where: { id: broadcast.walletId } });
     if (!wallet) throw new Error(`wallet ${broadcast.walletId} disappeared`);
 

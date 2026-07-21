@@ -193,4 +193,19 @@ contract SalyStakingTest is Test {
         staking.recoverERC20(address(other), 500e18);
         assertEq(other.balanceOf(owner), 500e18);
     }
+
+    function test_recover_rewardsToken_reverts() public {
+        // Same-token staking: rewardsToken == stakingToken already covered.
+        // Distinct rewards token must also be non-recoverable.
+        SalyToken reward = new SalyToken(owner, treasury, 1_000e18, MAX_SUPPLY);
+        vm.prank(owner);
+        reward.activate();
+        SalyStaking dual = new SalyStaking(owner, address(token), address(reward));
+        vm.prank(treasury);
+        reward.transfer(address(dual), 100e18);
+
+        vm.prank(owner);
+        vm.expectRevert(SalyStaking.Staking__CannotRecoverRewardsToken.selector);
+        dual.recoverERC20(address(reward), 100e18);
+    }
 }

@@ -7,12 +7,12 @@ import {
   Param,
   Post,
   Query,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { IsOptional, IsString, Length } from 'class-validator';
 import { loadEnv } from '@salychain/config';
 import { executionEnvSchema } from '../config/env.js';
+import { assertBearerToken } from '../common/assert-bearer.js';
 import { EscrowService } from './escrow.service.js';
 
 class EscrowResolveDto {
@@ -24,11 +24,7 @@ class EscrowResolveDto {
 
 function assertAdmin(authorization: string | undefined) {
   const env = loadEnv(executionEnvSchema);
-  const token = env.EXECUTION_ADMIN_TOKEN;
-  if (!token) throw new UnauthorizedException('escrow admin API is disabled');
-  if (authorization !== `Bearer ${token}`) {
-    throw new UnauthorizedException('invalid admin token');
-  }
+  assertBearerToken(authorization, env.EXECUTION_ADMIN_TOKEN, 'escrow admin API is disabled');
 }
 
 @ApiTags('escrow')

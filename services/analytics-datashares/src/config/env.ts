@@ -41,6 +41,8 @@ export const datasharesEnvSchema = z.object({
   DATASHARES_SNOWFLAKE_ENABLED: bool('false'),
   DATASHARES_BIGQUERY_ENABLED: bool('false'),
   DATASHARES_DATABRICKS_ENABLED: bool('false'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
 });
 
 export type DatasharesEnv = z.infer<typeof datasharesEnvSchema>;

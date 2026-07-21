@@ -94,4 +94,28 @@ contract SalySDTest is Test {
         );
         token.mint(user, 1e6);
     }
+
+    function test_revert_mint_on_stale_attestation() public {
+        uint64 attestedAt = uint64(block.timestamp);
+        uint64 maxAge = token.maxAttestationAge();
+        uint64 staleAt = attestedAt + maxAge + 1;
+        vm.warp(uint256(staleAt));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(SalySD.StaleAttestation.selector, attestedAt, maxAge, staleAt)
+        );
+        vm.prank(minter);
+        token.mint(user, 1e6);
+    }
+
+    function test_mint_succeeds_after_fresh_attestation() public {
+        vm.warp(block.timestamp + token.maxAttestationAge() + 1);
+
+        vm.prank(admin);
+        oracle.updateAttestation(CEILING, keccak256("por-fresh"));
+
+        vm.prank(minter);
+        token.mint(user, 1e6);
+        assertEq(token.balanceOf(user), 1e6);
+    }
 }

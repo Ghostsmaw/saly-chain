@@ -7,6 +7,8 @@ export const analyticsIngestEnvSchema = z.object({
   CLICKHOUSE_USER: z.string().default('salychain'),
   CLICKHOUSE_PASSWORD: z.string().default('salychain'),
   CLICKHOUSE_DATABASE: z.string().default('salychain_analytics'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
 });
 
 export type AnalyticsIngestEnv = z.infer<typeof analyticsIngestEnvSchema>;

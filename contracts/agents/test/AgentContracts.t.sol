@@ -39,4 +39,25 @@ contract AgentContractsTest is Test {
         uint256 withdrawn = streamPay.withdraw(streamId);
         assertGt(withdrawn, 0);
     }
+
+    function test_cancel_leaves_recipient_pull_balance() public {
+        vm.deal(agentOwner, 1 ether);
+        vm.prank(agentOwner);
+        streamPay.createStream{ value: 1 ether }(streamId, recipient, uint64(block.timestamp + 3600));
+
+        vm.warp(block.timestamp + 1800);
+        uint256 beforeRecipient = recipient.balance;
+
+        vm.prank(agentOwner);
+        streamPay.cancel(streamId);
+
+        // Pull-payment: cancel must not push to recipient.
+        assertEq(recipient.balance, beforeRecipient);
+        assertGt(streamPay.balanceOf(streamId), 0);
+
+        vm.prank(recipient);
+        uint256 pulled = streamPay.withdraw(streamId);
+        assertGt(pulled, 0);
+        assertEq(recipient.balance, beforeRecipient + pulled);
+    }
 }

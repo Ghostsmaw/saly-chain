@@ -62,3 +62,25 @@ spec:
     - port: 4020
       targetPort: http
       name: http
+---
+# PSP webhooks arrive via the edge; nothing else in the cluster may reach the
+# listener. Combined with signature verification and WEBHOOK_ALLOWED_IPS this
+# closes the "staging publishes :4020 to the whole cluster" gap.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fiat-listener-ingress-only
+  namespace: salychain-staging
+spec:
+  podSelector:
+    matchLabels:
+      app: fiat-listener
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 4020

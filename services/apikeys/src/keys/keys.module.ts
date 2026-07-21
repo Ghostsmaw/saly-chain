@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, DefaultValuePipe, Get, Module, Param, ParseBoolPipe, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { loadEnv } from '@salychain/config';
+import { GatewayCacheInvalidator } from './gateway-cache.invalidator.js';
 import { KeysService } from './keys.service.js';
 import { IssueApiKeyDto, RevokeApiKeyDto, RotateApiKeyDto, VerifyKeyDto } from './dto.js';
 import { APIKEYS_ENV } from '../config/env.runtime.js';
@@ -69,6 +70,7 @@ class KeysController {
   controllers: [KeysController],
   providers: [
     { provide: APIKEYS_ENV, useFactory: () => loadEnv(apiKeysEnvSchema) },
+    GatewayCacheInvalidator,
     KeysService,
   ],
   exports: [KeysService],

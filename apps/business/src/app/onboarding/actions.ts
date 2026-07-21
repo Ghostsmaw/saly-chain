@@ -9,7 +9,8 @@ import {
   setSkippedOnboardingCookie,
   syncOnboardingCookie,
 } from '@/lib/onboarding-cookies';
-import { ONBOARDING_COOKIE, ONBOARDING_SKIPPED } from '@/lib/onboarding-constants';
+import { ONBOARDING_COOKIE } from '@/lib/onboarding-constants';
+import { verifyOnboardingState } from '@/lib/onboarding-token';
 import {
   getBusinessOnboarding,
   resubmitBusinessOnboarding,
@@ -114,7 +115,10 @@ export async function submitOnboardingStepAction(
 
     const status = await submitBusinessOnboardingStep(session.userId, step, payload);
     const jar = await cookies();
-    const wasSkipped = jar.get(ONBOARDING_COOKIE)?.value === ONBOARDING_SKIPPED;
+    const gateState = await verifyOnboardingState(jar.get(ONBOARDING_COOKIE)?.value, session.userId, {
+      allowExpired: true,
+    });
+    const wasSkipped = gateState === 'skipped';
     if (status.complete) {
       await clearOnboardingCookie();
     } else if (!wasSkipped || status.status === 'pending_review' || status.status === 'rejected') {

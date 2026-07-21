@@ -1,4 +1,5 @@
 import { Layers3 } from 'lucide-react';
+import { safeInternalPath } from '@/lib/session';
 import { LoginForm } from './LoginForm';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,7 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  const safeNext = next && next.startsWith('/') ? next : '/';
+  const safeNext = safeInternalPath(next);
 
   return (
     <main className="min-h-screen bg-saly-bg-primary text-saly-text-primary">
@@ -30,15 +31,6 @@ export default async function LoginPage({
             </div>
 
             <LoginForm next={safeNext} />
-
-            {process.env.NODE_ENV !== 'production' ? (
-              <div className="rounded-saly border border-saly-border bg-saly-bg-secondary p-3.5 text-xs">
-                <p className="font-medium text-saly-text-secondary">Dev credentials</p>
-                <p className="mt-1.5 font-mono text-[11px] text-saly-text-faint">
-                  superadmin@salychain.io · ChangeMe!2026
-                </p>
-              </div>
-            ) : null}
 
             <p className="text-center text-xs text-saly-text-faint lg:text-left">
               Authorized personnel only · SalyChain Infrastructure

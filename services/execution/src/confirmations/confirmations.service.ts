@@ -24,6 +24,29 @@ export class ConfirmationsService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    // Wallet publishes this after broadcast with tx_hash. Execution transitions to
+    // AWAITING_CONFIRMATION before the hash exists, so we must attach it here or
+    // CHAIN_*_OBSERVED settlement lookups by tx_hash will miss.
+    await this.events.subscribe(
+      SUBJECTS.TX_AWAITING_CONFIRMATION,
+      'execution-attach-broadcast-hash',
+      async (event) => {
+        try {
+          await this.txs.attachTxHashFromBroadcast({
+            broadcastJobId: event.transaction_id,
+            txHash: event.tx_hash,
+          });
+          return 'ack';
+        } catch (err) {
+          this.logger.warn(
+            `failed to attach tx_hash for broadcast ${event.transaction_id}: ${(err as Error).message}`,
+          );
+          return 'nack';
+        }
+      },
+    );
+    this.logger.log('subscribed to wallet broadcast hash attachments');
+
     await this.events.subscribe(
       SUBJECTS.CHAIN_BASE_TRANSFER_OBSERVED,
       'execution-base-confirmations',

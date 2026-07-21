@@ -36,6 +36,51 @@ export interface XrplAdapterOptions {
   logger?: Logger;
 }
 
+/** Flat fields used by payment decoding after ledger expand. */
+export interface NormalizedExpandedLedgerTx {
+  TransactionType?: string;
+  Account?: string;
+  Destination?: string;
+  Amount?: unknown;
+  DestinationTag?: number;
+  Fee?: string;
+  hash?: string;
+  metaResult?: string;
+}
+
+/**
+ * Normalize expanded ledger txs across HTTP JSON-RPC (flat Payment + metaData)
+ * and newer rippled / xrpl.js WS responses ({ hash, meta, tx_json }).
+ */
+export function normalizeExpandedLedgerTx(txEntry: unknown): NormalizedExpandedLedgerTx | null {
+  if (!txEntry || typeof txEntry !== 'object') return null;
+  const raw = txEntry as Record<string, unknown>;
+  const txJson =
+    raw.tx_json && typeof raw.tx_json === 'object'
+      ? (raw.tx_json as Record<string, unknown>)
+      : raw;
+  const metaCandidate =
+    raw.meta ??
+    raw.metaData ??
+    txJson.meta ??
+    txJson.metaData;
+  const meta =
+    metaCandidate && typeof metaCandidate === 'object'
+      ? (metaCandidate as { TransactionResult?: string })
+      : undefined;
+  return {
+    TransactionType: txJson.TransactionType as string | undefined,
+    Account: txJson.Account as string | undefined,
+    Destination: txJson.Destination as string | undefined,
+    // Newer rippled/WS payloads often omit Amount and only set DeliverMax.
+    Amount: (txJson.Amount ?? txJson.DeliverMax) as unknown,
+    DestinationTag: txJson.DestinationTag as number | undefined,
+    Fee: txJson.Fee as string | undefined,
+    hash: (raw.hash ?? txJson.hash) as string | undefined,
+    metaResult: meta?.TransactionResult,
+  };
+}
+
 export interface PreparedXrplPayment {
   /** Unsigned, autofilled Payment transaction in canonical XRPL JSON. */
   transaction: Payment;
@@ -114,7 +159,9 @@ export class XrplChainAdapter {
 
   async connect(): Promise<Client> {
     if (this.client?.isConnected()) return this.client;
-    this.client = new Client(this.wsUrl, { timeout: 15_000 });
+    // `timeout` is per-request; `connectionTimeout` covers the initial WS handshake
+    // (rippled testnet often exceeds the library default of 5s).
+    this.client = new Client(this.wsUrl, { timeout: 15_000, connectionTimeout: 30_000 });
     try {
       await this.client.connect();
       this.logger?.debug?.(`xrpl connected to ${this.wsUrl}`);
@@ -379,26 +426,27 @@ export class XrplChainAdapter {
         };
         const closeTime = Number(ledger.close_time ?? 0);
         for (const txEntry of ledger.transactions ?? []) {
-          const tx = txEntry as Record<string, unknown>;
-          if (tx.TransactionType !== 'Payment') continue;
-          const from = String(tx.Account ?? '');
-          const to = String(tx.Destination ?? '');
+          // HTTP JSON-RPC returns flat Payment fields + metaData; newer rippled /
+          // xrpl.js WS expand returns { hash, meta, tx_json }.
+          const normalized = normalizeExpandedLedgerTx(txEntry);
+          if (!normalized || normalized.TransactionType !== 'Payment') continue;
+          const from = String(normalized.Account ?? '');
+          const to = String(normalized.Destination ?? '');
           if (!addressSet.has(from) && !addressSet.has(to)) continue;
-          const amount = tx.Amount;
-          const meta = tx.metaData as { TransactionResult?: string } | undefined;
-          const result = meta?.TransactionResult ?? 'unknown';
+          const amount = normalized.Amount;
+          const result = normalized.metaResult ?? 'unknown';
           if (result !== 'tesSUCCESS') continue;
 
           if (typeof amount === 'string') {
             results.push({
-              txHash: String(tx.hash ?? ''),
+              txHash: String(normalized.hash ?? ''),
               ledgerIndex,
               closeTime,
               from,
               to,
               amountDrops: amount,
-              destinationTag: tx.DestinationTag as number | undefined,
-              fee: String(tx.Fee ?? '0'),
+              destinationTag: normalized.DestinationTag,
+              fee: String(normalized.Fee ?? '0'),
               result,
             });
             continue;
@@ -408,14 +456,14 @@ export class XrplChainAdapter {
             const iou = amount as { currency?: string; issuer?: string; value?: string };
             if (!iou.currency || !iou.issuer || !iou.value) continue;
             results.push({
-              txHash: String(tx.hash ?? ''),
+              txHash: String(normalized.hash ?? ''),
               ledgerIndex,
               closeTime,
               from,
               to,
               iou: { currency: iou.currency, issuer: iou.issuer, value: iou.value },
-              destinationTag: tx.DestinationTag as number | undefined,
-              fee: String(tx.Fee ?? '0'),
+              destinationTag: normalized.DestinationTag,
+              fee: String(normalized.Fee ?? '0'),
               result,
             });
           }

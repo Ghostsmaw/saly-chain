@@ -3,7 +3,7 @@ import type { Address, Hex } from 'viem';
 import { ValidationError } from '@salychain/errors';
 import { BaseChainAdapter, isEscrowDealId } from '@salychain/chain-base';
 import { SignerClient } from '@salychain/sdk-internal';
-import { loadEnv } from '@salychain/config';
+import { constantTimeEquals, loadEnv } from '@salychain/config';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PolicyService } from '../wallets/policy.service.js';
 import { SIGNER_CLIENT } from '../signer/signer.module.js';
@@ -89,11 +89,19 @@ export class EscrowResolveService {
   }
 }
 
+/**
+ * Guards wallet escrow resolution (release/refund moves custodial funds).
+ *
+ * Fails closed: without a configured token the endpoint is DISABLED, never
+ * open. Uses a constant-time comparison to avoid a timing oracle.
+ */
 export function assertWalletInternalAuth(authorization: string | undefined) {
   const env = loadEnv(walletEnvSchema);
   const token = env.WALLET_INTERNAL_ADMIN_TOKEN;
-  if (!token) return;
-  if (authorization !== `Bearer ${token}`) {
+  if (!token) {
+    throw new UnauthorizedException('wallet internal admin API is disabled (no token configured)');
+  }
+  if (!authorization || !constantTimeEquals(authorization, `Bearer ${token}`)) {
     throw new UnauthorizedException('invalid internal admin token');
   }
 }

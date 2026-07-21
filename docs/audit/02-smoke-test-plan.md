@@ -329,28 +329,17 @@ toxiproxy-cli toxic add ledger_db -t latency -a latency=5000
 
 ## 5. Automation scaffolds (ready to drop in)
 
-### 5.1 Health smoke (`scripts/smoke/health.sh`)
+### 5.1 Health smoke (`scripts/smoke/health.sh`) — **implemented**
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-PORTS=(4000 4001 4002 4003 4004 4005 4006 4007 4008 4009 4010 4011 4012 4013 4014 4099)
-fail=0
-for p in "${PORTS[@]}"; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$p/v1/health" || echo 000)
-  [ "$code" = "200" ] && echo "OK   :$p" || { echo "FAIL :$p ($code)"; fail=1; }
-done
-for w in "4098:l3-monitor" "4020:fiat-listener"; do
-  port=${w%%:*}; name=${w##*:}
-  code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$port/health" || echo 000)
-  [ "$code" = "200" ] && echo "OK   $name" || echo "WARN $name ($code)"
-done
-exit $fail
+pnpm smoke:health
+# or: ./scripts/smoke/health.sh
 ```
 
-### 5.2 API smoke runner (`smoke/` package — proposed)
-- `smoke/package.json` with Vitest + `@salychain/sdk` + `@salychain/sdk-internal`.
-- Tags: `@infra @auth @dev @payments @ai @security`.
-- `pnpm -F @salychain/smoke test --grep @payments`.
+Also: `pnpm smoke:wait` (`wait-healthy.sh`), `pnpm smoke:partner` (`partner-flow.sh` — org→key→webhook→intent→SETTLED).
+
+### 5.2 API smoke runner (`tests/smoke` — **implemented**)
+- Package: `@salychain/smoke-tests` (`pnpm smoke:test`).
+- Contract tests always run; live partner-flow runs when `SMOKE_GATEWAY_URL` is set (`pnpm -F @salychain/smoke-tests test:live`).
 
 ### 5.3 CI wiring (extend `.github/workflows/ci.yml`)
 ```yaml

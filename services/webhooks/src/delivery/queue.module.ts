@@ -3,6 +3,7 @@ import { Redis } from 'ioredis';
 import { Queue } from 'bullmq';
 import { loadEnv } from '@salychain/config';
 import { webhooksEnvSchema, WEBHOOKS_ENV, type WebhooksEnv } from '../config/env.js';
+import { SECRET_VAULT, SecretVault } from '../crypto/secret-vault.js';
 
 export const REDIS_CONNECTION = Symbol('REDIS_CONNECTION');
 export const DELIVERY_QUEUE = Symbol('DELIVERY_QUEUE');
@@ -13,6 +14,11 @@ export const DELIVERY_QUEUE_NAME = 'webhooks-delivery';
 @Module({
   providers: [
     { provide: WEBHOOKS_ENV, useFactory: () => loadEnv(webhooksEnvSchema) },
+    {
+      provide: SECRET_VAULT,
+      inject: [WEBHOOKS_ENV],
+      useFactory: (env: WebhooksEnv) => new SecretVault(env.WEBHOOK_SECRET_ENC_KEY),
+    },
     {
       provide: REDIS_CONNECTION,
       inject: [WEBHOOKS_ENV],
@@ -34,6 +40,6 @@ export const DELIVERY_QUEUE_NAME = 'webhooks-delivery';
         }),
     },
   ],
-  exports: [WEBHOOKS_ENV, REDIS_CONNECTION, DELIVERY_QUEUE],
+  exports: [WEBHOOKS_ENV, REDIS_CONNECTION, DELIVERY_QUEUE, SECRET_VAULT],
 })
 export class QueueModule {}

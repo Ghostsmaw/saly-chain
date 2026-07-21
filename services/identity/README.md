@@ -14,7 +14,7 @@ Consumer identity for the Saly AI surface (S4). Partners continue to use API key
 | Method | Path | Description |
 |---|---|---|
 | POST | `/v1/users` | Register user |
-| POST | `/v1/auth/token` | Issue JWT for user |
+| POST | `/v1/auth/token` | Issue JWT for user (internal — requires `IDENTITY_INTERNAL_ADMIN_TOKEN`) |
 | POST | `/v1/auth/verify` | Verify JWT (gateway internal) |
 | GET | `/v1/.well-known/jwks.json` | JWKS metadata |
 | POST | `/v1/delegations` | Grant user → agent delegation |

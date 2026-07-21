@@ -20,14 +20,19 @@ export function SalyShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-screen overflow-hidden bg-saly-bg-primary">
-      <div className="hidden lg:flex">
+    <div className="relative flex h-screen overflow-hidden bg-saly-bg-primary">
+      {/* Ambient accent glow drifting behind the content. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="absolute left-[10%] top-[-20%] h-[420px] w-[420px] animate-float-slow rounded-full bg-saly-accent/[0.05] blur-[100px]" />
+      </div>
+
+      <div className="relative z-10 hidden lg:flex">
         <SalySidebar />
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[var(--saly-topbar-height)] shrink-0 items-center justify-between gap-4 border-b border-saly-border bg-saly-bg-primary/80 px-4 backdrop-blur-md lg:px-6">
-          <div className="min-w-0">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+        <header className="flex h-[var(--saly-topbar-height)] shrink-0 items-center justify-between gap-4 border-b border-saly-border bg-saly-bg-primary/70 px-4 backdrop-blur-xl backdrop-saturate-150 lg:px-6">
+          <div className="min-w-0 animate-fade-in-up">
             <h1 className="truncate text-sm font-medium tracking-tight text-saly-text-primary">{title}</h1>
             {subtitle ? <p className="truncate text-xs text-saly-text-muted">{subtitle}</p> : null}
           </div>
@@ -39,7 +44,7 @@ export function SalyShell({
         </header>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">{children}</div>
+          <div className="saly-stagger mx-auto max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">{children}</div>
         </main>
       </div>
     </div>
@@ -95,10 +100,10 @@ function UserMenu() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-11 z-50 w-56 overflow-hidden rounded-saly-lg border border-saly-border bg-saly-bg-card shadow-saly-hover">
+        <div className="saly-glass absolute right-0 top-11 z-50 w-56 animate-scale-in overflow-hidden rounded-saly-lg shadow-saly-hover">
           <div className="border-b border-saly-border px-4 py-3">
             <p className="text-sm font-medium text-saly-text-primary">{name}</p>
-            <p className="truncate text-xs text-saly-text-muted">{user?.email ?? 'superadmin@salychain.io'}</p>
+            <p className="truncate text-xs text-saly-text-muted">{user?.email ?? '—'}</p>
           </div>
           <button
             type="button"

@@ -25,16 +25,24 @@ contract SalySD is ERC20, ERC20Burnable, ERC20Pausable, ERC20Permit, AccessContr
 
     IReserveOracle public immutable reserveOracle;
 
+    /// @notice Max age of a reserve attestation before mint is rejected.
+    ///         Defaults to 1 day; admin may tighten/loosen within [1 hour, 30 days].
+    uint64 public maxAttestationAge = 1 days;
+
     mapping(address account => bool blocked) private _blocked;
 
     event BlocklistUpdated(address indexed account, bool blocked);
     event Minted(address indexed to, uint256 amount, uint256 totalSupplyAfter);
     event Burned(address indexed from, uint256 amount, uint256 totalSupplyAfter);
+    event MaxAttestationAgeUpdated(uint64 previousAge, uint64 newAge);
 
     error ZeroAddress();
     error ZeroAmount();
     error Blocklisted(address account);
     error ExceedsMintCeiling(uint256 requested, uint256 ceiling, uint256 currentSupply);
+    error StaleAttestation(uint64 attestedAt, uint64 maxAge, uint64 nowTs);
+    error MissingAttestationHash();
+    error InvalidAttestationAge();
 
     constructor(address admin, address minter, address burner, IReserveOracle oracle_)
         ERC20("Saly Dollar", "SalySD")
@@ -50,6 +58,13 @@ contract SalySD is ERC20, ERC20Burnable, ERC20Pausable, ERC20Permit, AccessContr
         _grantRole(BURNER_ROLE, burner);
         _grantRole(PAUSER_ROLE, admin);
         _grantRole(BLOCKLIST_ADMIN_ROLE, admin);
+    }
+
+    function setMaxAttestationAge(uint64 newAge) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newAge < 1 hours || newAge > 30 days) revert InvalidAttestationAge();
+        uint64 previous = maxAttestationAge;
+        maxAttestationAge = newAge;
+        emit MaxAttestationAgeUpdated(previous, newAge);
     }
 
     function decimals() public pure override returns (uint8) {
@@ -78,6 +93,14 @@ contract SalySD is ERC20, ERC20Burnable, ERC20Pausable, ERC20Permit, AccessContr
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
         if (_blocked[to]) revert Blocklisted(to);
+
+        // PoR freshness: a stale/zero attestation must not authorize minting
+        // against a ceiling that no longer reflects reserve reality.
+        if (reserveOracle.reserveAttestationHash() == bytes32(0)) revert MissingAttestationHash();
+        uint64 attestedAt = reserveOracle.lastAttestationAt();
+        if (attestedAt == 0 || block.timestamp > uint256(attestedAt) + uint256(maxAttestationAge)) {
+            revert StaleAttestation(attestedAt, maxAttestationAge, uint64(block.timestamp));
+        }
 
         uint256 supplyAfter = totalSupply() + amount;
         uint256 ceiling = reserveOracle.authorizedMintCeiling();

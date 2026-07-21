@@ -190,10 +190,20 @@ export class QuoteService {
       throw ValidationError('liquidity.quote_bad_signature', `Quote ${quoteId} signature mismatch`);
     }
 
-    const updated = await this.prisma.quote.update({
-      where: { id: quoteId },
+    // Conditional update closes the TOCTOU race between concurrent consume calls.
+    const claimed = await this.prisma.quote.updateMany({
+      where: { id: quoteId, status: 'ISSUED', expiresAt: { gt: new Date() } },
       data: { status: 'CONSUMED', consumedAt: new Date() },
     });
+    if (claimed.count !== 1) {
+      const latest = await this.prisma.quote.findUnique({ where: { id: quoteId } });
+      if (latest?.status === 'CONSUMED') {
+        throw ConflictError('liquidity.quote_already_consumed', `Quote ${quoteId} has been consumed`);
+      }
+      throw ConflictError('liquidity.quote_expired', `Quote ${quoteId} expired`);
+    }
+
+    const updated = await this.prisma.quote.findUniqueOrThrow({ where: { id: quoteId } });
 
     return {
       quote_id: updated.id,

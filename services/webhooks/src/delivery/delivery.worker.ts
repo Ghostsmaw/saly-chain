@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { DELIVERY_QUEUE_NAME, REDIS_CONNECTION } from './queue.module.js';
 import { WEBHOOKS_ENV, type WebhooksEnv } from '../config/env.js';
+import { SECRET_VAULT, SecretVault } from '../crypto/secret-vault.js';
 import { signPayload } from './signing.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 import type { DeliveryJobPayload } from './delivery.service.js';
@@ -28,6 +29,7 @@ export class DeliveryWorker implements OnModuleInit, OnModuleDestroy {
     private readonly subs: SubscriptionsService,
     @Inject(REDIS_CONNECTION) private readonly redis: Redis,
     @Inject(WEBHOOKS_ENV) private readonly env: WebhooksEnv,
+    @Inject(SECRET_VAULT) private readonly vault: SecretVault,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -82,7 +84,7 @@ export class DeliveryWorker implements OnModuleInit, OnModuleDestroy {
       delivery_attempt: (delivery.attempts ?? 0) + 1,
       data: delivery.payload,
     });
-    const signed = signPayload(sub.signingSecret, sub.signingKeyId, body);
+    const signed = signPayload(this.vault.open(sub.signingSecret), sub.signingKeyId, body);
     const correlationId = ulid();
 
     await this.prisma.delivery.update({

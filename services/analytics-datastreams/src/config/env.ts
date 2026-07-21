@@ -25,6 +25,8 @@ export const datastreamsEnvSchema = z.object({
   /// Optional prefix enforced on every Kafka topic a stream may target. Keeps a
   /// tenant from producing onto arbitrary internal topics. Empty = no prefix.
   DATASTREAMS_KAFKA_TOPIC_PREFIX: z.string().default('salychain.datastreams.'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
 });
 
 export type DatastreamsEnv = z.infer<typeof datastreamsEnvSchema>;

@@ -25,7 +25,16 @@ export const gatewayEnvSchema = z.object({
   AVIATION_BASE_URL: z.string().url().default('http://localhost:4027'),
   HEALTH_BASE_URL: z.string().url().default('http://localhost:4028'),
   EDU_BASE_URL: z.string().url().default('http://localhost:4029'),
+  /**
+   * Number of trusted reverse proxies in front of the gateway (Express
+   * `trust proxy` hop count). Client IPs for ip_allow_list checks are derived
+   * from this; counting hops (instead of trusting the leftmost XFF entry)
+   * is what stops X-Forwarded-For spoofing.
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
   APIKEY_CACHE_TTL_SEC: z.coerce.number().int().positive().default(15),
+  /** Max FAILED credential attempts per client IP per minute (pre-auth throttle). */
+  AUTH_FAILURE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(30),
   IDEMPOTENCY_WINDOW_SECONDS: z.coerce.number().int().positive().default(86_400),
   /** Shared secret for portal server-side log reads (development / internal). */
   PORTAL_INTERNAL_SECRET: z.string().min(8).optional(),

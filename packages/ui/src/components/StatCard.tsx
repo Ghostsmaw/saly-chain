@@ -39,7 +39,7 @@ export function StatCard({
   const isUp = changePct !== undefined && changePct >= 0;
 
   return (
-    <Card className={cn('relative overflow-hidden', className)}>
+    <Card className={cn('saly-card-hover relative overflow-hidden', className)}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-text-tertiary">{label}</p>

@@ -5,6 +5,7 @@ import { login, persistSession } from '@/lib/auth';
 import { describeAuthError } from '@/lib/auth-error';
 import { clearOnboardingCookie, syncOnboardingCookie } from '@/lib/onboarding-cookies';
 import { refreshOnboardingGate, startBusinessOnboarding, postAuthRedirectPath } from '@/lib/onboarding';
+import { safeInternalPath } from '@/lib/session';
 
 export interface LoginState {
   error?: string;
@@ -19,7 +20,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     return { error: 'Enter your email and password.' };
   }
 
-  let redirectPath = next.startsWith('/') ? next : '/';
+  let redirectPath = safeInternalPath(next);
 
   try {
     const session = await login(email, password);

@@ -30,6 +30,7 @@ import { AgentsClient } from '@salychain/sdk-internal';
 import { AuthorizationError } from '@salychain/errors';
 import { RequireScopes, ScopeGuard } from '../auth/scope.guard.js';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { enforceOrgScope } from '../auth/org-scope.js';
 import { AGENTS_CLIENT } from '../auth/s4-clients.module.js';
 
 class CreateAgentBody {
@@ -67,7 +68,7 @@ export class AgentsController {
     return this.agents.create({
       ownerId: body.owner_id,
       ownerKind: body.owner_kind,
-      orgId: body.org_id ?? req.auth?.org_id,
+      orgId: enforceOrgScope(req, body.org_id),
       name: body.name,
       metadata: body.metadata,
       provisionChains: body.provision_chains,
@@ -91,7 +92,7 @@ export class AgentsController {
   @RequireScopes('agents:read')
   async byId(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     const agent = await this.agents.getById(id);
-    this.assertAgentAccess(req, agent.owner_id, id);
+    this.assertAgentAccess(req, agent, id);
     return agent;
   }
 
@@ -99,7 +100,7 @@ export class AgentsController {
   @RequireScopes('agents:read')
   async getPolicy(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     const agent = await this.agents.getById(id);
-    this.assertAgentAccess(req, agent.owner_id, id);
+    this.assertAgentAccess(req, agent, id);
     return this.agents.getPolicy(id);
   }
 
@@ -107,7 +108,7 @@ export class AgentsController {
   @RequireScopes('agents:write')
   async updatePolicy(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() body: UpdatePolicyBody) {
     const agent = await this.agents.getById(id);
-    this.assertAgentAccess(req, agent.owner_id, id);
+    this.assertAgentAccess(req, agent, id);
     return this.agents.updatePolicy(id, {
       perTxCapMinor: body.per_tx_cap_minor,
       dailyCapMinor: body.daily_cap_minor,
@@ -127,7 +128,7 @@ export class AgentsController {
     @Query('limit', new DefaultValuePipe(25), ParseIntPipe) limit: number,
   ) {
     const agent = await this.agents.getById(id);
-    this.assertAgentAccess(req, agent.owner_id, id);
+    this.assertAgentAccess(req, agent, id);
     return this.agents.listReasoningLogs(id, limit);
   }
 
@@ -137,14 +138,38 @@ export class AgentsController {
     }
   }
 
-  private assertAgentAccess(req: AuthenticatedRequest, ownerId: string, agentId: string) {
+  /**
+   * Enforces per-caller agent ownership for both auth modes.
+   *
+   * JWT (consumer) principals may only reach agents delegated to them.
+   *
+   * API-key (business/developer) principals are bound to an org, never a
+   * single user — a valid key for org A must never read or mutate an
+   * agent belonging to org B. Previously this branch was unguarded (no
+   * `else`), so any API key could fetch, read the spend policy of, or
+   * rewrite the spend policy on ANY agent in the system by id (IDOR).
+   * We fail closed: an org-scoped credential can only touch agents whose
+   * `org_id` matches, and an agent with no `org_id` on record is treated
+   * as inaccessible to org-scoped callers rather than implicitly public.
+   */
+  private assertAgentAccess(
+    req: AuthenticatedRequest,
+    agent: { owner_id: string; org_id?: string },
+    agentId: string,
+  ) {
     if (req.auth?.auth_mode === 'jwt') {
-      if (req.auth.user_id !== ownerId) {
+      if (req.auth.user_id !== agent.owner_id) {
         throw AuthorizationError('gateway.agent.forbidden', 'Agent not delegated to this user');
       }
       if (req.auth.agent_ids && !req.auth.agent_ids.includes(agentId)) {
         throw AuthorizationError('gateway.agent.not_delegated', `No delegation for agent ${agentId}`);
       }
+      return;
+    }
+
+    const callerOrgId = req.auth?.org_id;
+    if (!callerOrgId || agent.org_id !== callerOrgId) {
+      throw AuthorizationError('gateway.agent.forbidden', 'Agent does not belong to this organization');
     }
   }
 }

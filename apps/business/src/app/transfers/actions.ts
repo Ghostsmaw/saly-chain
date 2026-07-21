@@ -4,8 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { ulid } from 'ulid';
 import { Money, type CurrencyCode } from '@salychain/money';
 import { submitTransferIntent, voteSpendApproval } from '@/lib/api';
+import { requireSession } from '@/lib/auth';
 
 export async function submitTransfer(formData: FormData) {
+  await requireSession();
   const amountRaw = String(formData.get('amount') ?? '').trim();
   const currency = String(formData.get('currency') ?? 'USDC');
   const kind = String(formData.get('kind') ?? 'PAYOUT') as 'TRANSFER' | 'PAYOUT';
@@ -99,6 +101,7 @@ export async function submitTransfer(formData: FormData) {
 }
 
 export async function approveSpend(agentId: string, requestId: string) {
+  await requireSession();
   try {
     await voteSpendApproval(agentId, requestId);
     revalidatePath('/approvals');

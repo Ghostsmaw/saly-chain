@@ -21,6 +21,8 @@ export const riskEnvSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   INTELLIGENCE_BASE_URL: z.string().url().default('http://localhost:4019'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
 });
 
 export type RiskEnv = z.infer<typeof riskEnvSchema>;

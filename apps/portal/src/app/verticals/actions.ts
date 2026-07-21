@@ -22,6 +22,7 @@ import {
   mutateSubmitHealthClaim,
   mutateUpsertFinanceHolding,
 } from '@/lib/verticals';
+import { requireSession } from '@/lib/auth';
 
 function redirectVertical(path: string, result: { ok: boolean; message?: string; error?: string }) {
   revalidatePath(path);
@@ -32,6 +33,7 @@ function redirectVertical(path: string, result: { ok: boolean; message?: string;
 }
 
 export async function createFinanceInstrumentAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateCreateFinanceInstrument({
     type: String(formData.get('type') ?? 'BOND') as 'BOND' | 'FUND' | 'RWA',
     name: String(formData.get('name') ?? '').trim(),
@@ -42,6 +44,7 @@ export async function createFinanceInstrumentAction(formData: FormData): Promise
 }
 
 export async function upsertFinanceHoldingAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateUpsertFinanceHolding({
     accountRef: String(formData.get('account_ref') ?? '').trim(),
     instrumentId: String(formData.get('instrument_id') ?? '').trim(),
@@ -51,6 +54,7 @@ export async function upsertFinanceHoldingAction(formData: FormData): Promise<vo
 }
 
 export async function originateFinanceLoanAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateOriginateFinanceLoan({
     borrowerRef: String(formData.get('borrower_ref') ?? '').trim(),
     principalMinor: String(formData.get('principal_minor') ?? '').trim(),
@@ -61,6 +65,7 @@ export async function originateFinanceLoanAction(formData: FormData): Promise<vo
 }
 
 export async function createGovProgramAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateCreateGovProgram({
     name: String(formData.get('name') ?? '').trim(),
     budgetMinor: String(formData.get('budget_minor') ?? '').trim(),
@@ -70,16 +75,19 @@ export async function createGovProgramAction(formData: FormData): Promise<void> 
 }
 
 export async function registerHealthProviderAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateRegisterHealthProvider(String(formData.get('name') ?? '').trim());
   redirectVertical('/verticals/health', result);
 }
 
 export async function registerHealthPayerAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateRegisterHealthPayer(String(formData.get('name') ?? '').trim());
   redirectVertical('/verticals/health', result);
 }
 
 export async function grantHealthConsentAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateGrantHealthConsent({
     patientRef: String(formData.get('patient_ref') ?? '').trim(),
     scope: String(formData.get('scope') ?? '').trim(),
@@ -88,6 +96,7 @@ export async function grantHealthConsentAction(formData: FormData): Promise<void
 }
 
 export async function submitHealthClaimAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateSubmitHealthClaim({
     providerId: String(formData.get('provider_id') ?? '').trim(),
     payerId: String(formData.get('payer_id') ?? '').trim(),
@@ -99,6 +108,7 @@ export async function submitHealthClaimAction(formData: FormData): Promise<void>
 }
 
 export async function adjudicateHealthClaimAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateAdjudicateHealthClaim(
     String(formData.get('claim_id') ?? '').trim(),
     String(formData.get('approved') ?? 'true') === 'true',
@@ -107,11 +117,13 @@ export async function adjudicateHealthClaimAction(formData: FormData): Promise<v
 }
 
 export async function createAgentAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateCreateAgent(String(formData.get('name') ?? '').trim());
   redirectVertical('/verticals/agents', result);
 }
 
 export async function publishAgentServiceAction(formData: FormData): Promise<void> {
+  await requireSession();
   const tagsRaw = String(formData.get('tags') ?? '').trim();
   const tags = tagsRaw ? tagsRaw.split(',').map((t) => t.trim()).filter(Boolean) : undefined;
   const result = await mutatePublishAgentService({
@@ -126,11 +138,13 @@ export async function publishAgentServiceAction(formData: FormData): Promise<voi
 }
 
 export async function registerAgriFarmerAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateRegisterAgriFarmer(String(formData.get('external_ref') ?? '').trim());
   redirectVertical('/verticals/agri', result);
 }
 
 export async function registerAgriFarmAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateRegisterAgriFarm({
     farmerId: String(formData.get('farmer_id') ?? '').trim(),
     crop: String(formData.get('crop') ?? '').trim() || undefined,
@@ -140,6 +154,7 @@ export async function registerAgriFarmAction(formData: FormData): Promise<void> 
 }
 
 export async function createScmShipmentAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateCreateScmShipment({
     origin: String(formData.get('origin') ?? '').trim(),
     destination: String(formData.get('destination') ?? '').trim(),
@@ -148,6 +163,7 @@ export async function createScmShipmentAction(formData: FormData): Promise<void>
 }
 
 export async function registerAviationAircraftAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateRegisterAviationAircraft({
     tail: String(formData.get('tail') ?? '').trim(),
     model: String(formData.get('model') ?? '').trim(),
@@ -157,11 +173,13 @@ export async function registerAviationAircraftAction(formData: FormData): Promis
 }
 
 export async function registerEduInstitutionAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateRegisterEduInstitution(String(formData.get('name') ?? '').trim());
   redirectVertical('/verticals/edu', result);
 }
 
 export async function issueEduCredentialAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateIssueEduCredential({
     institutionId: String(formData.get('institution_id') ?? '').trim(),
     learnerRef: String(formData.get('learner_ref') ?? '').trim(),
@@ -172,6 +190,7 @@ export async function issueEduCredentialAction(formData: FormData): Promise<void
 }
 
 export async function disburseEduScholarshipAction(formData: FormData): Promise<void> {
+  await requireSession();
   const result = await mutateDisburseEduScholarship(String(formData.get('grant_id') ?? '').trim());
   redirectVertical('/verticals/edu', result);
 }

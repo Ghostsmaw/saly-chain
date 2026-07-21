@@ -46,11 +46,26 @@ const config: Config = {
       },
       animation: {
         'pulse-subtle': 'pulse-subtle 2.5s ease-in-out infinite',
+        'fade-in-up': 'fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'scale-in': 'scale-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'float-slow': 'float-orb 20s ease-in-out infinite',
       },
       keyframes: {
         'pulse-subtle': {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.55' },
+        },
+        'fade-in-up': {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'scale-in': {
+          '0%': { opacity: '0', transform: 'scale(0.96) translateY(-4px)' },
+          '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
+        },
+        'float-orb': {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0) scale(1)' },
+          '50%': { transform: 'translate3d(24px, -20px, 0) scale(1.05)' },
         },
       },
     },

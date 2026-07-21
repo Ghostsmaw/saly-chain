@@ -10,7 +10,7 @@ export function SalySidebar() {
   const activeKey = matchSalyNavKey(pathname);
 
   return (
-    <aside className="flex h-full w-[var(--saly-sidebar-width)] shrink-0 flex-col border-r border-saly-border bg-saly-bg-secondary">
+    <aside className="flex h-full w-[var(--saly-sidebar-width)] shrink-0 flex-col border-r border-saly-border bg-saly-bg-secondary/70 backdrop-blur-xl backdrop-saturate-150">
       <div className="flex h-[var(--saly-topbar-height)] items-center border-b border-saly-border px-4">
         <Link href="/" className="flex items-center gap-2.5">
           <div className="grid h-7 w-7 place-items-center rounded-saly bg-white text-[11px] font-bold text-black">
@@ -38,13 +38,20 @@ export function SalySidebar() {
                     <Link
                       href={item.href}
                       className={cn(
-                        'flex items-center gap-2.5 rounded-saly px-2.5 py-2 text-[13px] transition-all duration-200',
+                        'relative flex items-center gap-2.5 rounded-saly px-2.5 py-2 text-[13px] transition-all duration-200',
                         active
-                          ? 'bg-white/[0.06] font-medium text-saly-text-primary'
-                          : 'text-saly-text-muted hover:bg-saly-bg-hover hover:text-saly-text-secondary',
+                          ? 'bg-white/[0.06] font-medium text-saly-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+                          : 'text-saly-text-muted hover:bg-saly-bg-hover hover:pl-3 hover:text-saly-text-secondary',
                       )}
                     >
-                      <Icon className={cn('h-4 w-4 shrink-0', active ? 'text-saly-text-primary' : 'text-saly-text-faint')} />
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-saly-accent transition-all duration-300',
+                          active ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0',
+                        )}
+                      />
+                      <Icon className={cn('h-4 w-4 shrink-0 transition-colors duration-200', active ? 'text-saly-accent' : 'text-saly-text-faint')} />
                       <span className="truncate">{item.label}</span>
                     </Link>
                   </li>
@@ -56,7 +63,7 @@ export function SalySidebar() {
       </nav>
 
       <div className="border-t border-saly-border p-3">
-        <div className="rounded-saly border border-saly-border bg-saly-bg-card px-3 py-2.5">
+        <div className="saly-glass rounded-saly px-3 py-2.5">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />

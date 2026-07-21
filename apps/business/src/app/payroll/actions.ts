@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { ulid } from 'ulid';
 import { Money, type CurrencyCode } from '@salychain/money';
 import { submitPayrollIntent } from '@/lib/api';
+import { requireSession } from '@/lib/auth';
 
 interface PayrollRowPayload {
   id: string;
@@ -15,6 +16,7 @@ interface PayrollRowPayload {
 }
 
 export async function runPayroll(formData: FormData) {
+  await requireSession();
   const raw = String(formData.get('payroll_json') ?? '');
   let payload: {
     rows: PayrollRowPayload[];

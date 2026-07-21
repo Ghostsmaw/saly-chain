@@ -1,8 +1,11 @@
 import { Body, Controller, Get, Module, Param, Patch, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsIn, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
+import { loadEnv } from '@salychain/config';
 import { KycModule } from '../kyc/kyc.module.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
+import { complianceEnvSchema } from '../config/env.js';
+import { PII_VAULT, PiiVault } from '../crypto/pii-vault.js';
 import { OnboardingService, type OnboardingProfile } from './onboarding.service.js';
 
 class StartOnboardingDto {
@@ -69,7 +72,13 @@ class OnboardingController {
 @Module({
   imports: [KycModule, PrismaModule],
   controllers: [OnboardingController],
-  providers: [OnboardingService],
+  providers: [
+    {
+      provide: PII_VAULT,
+      useFactory: () => new PiiVault(loadEnv(complianceEnvSchema).COMPLIANCE_PII_ENC_KEY),
+    },
+    OnboardingService,
+  ],
   exports: [OnboardingService],
 })
 export class OnboardingModule {}

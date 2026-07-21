@@ -87,6 +87,13 @@ contract SalyAssetTokenTest is Test {
 
     function test_burn() public {
         token.mint(holder, 2, 50, "");
+
+        // MINTER_ROLE alone is not enough to destroy a holder's balance —
+        // the holder must consent by approving the minter as an operator,
+        // exactly as ERC-1155 already requires for transfers.
+        vm.prank(holder);
+        token.setApprovalForAll(minter, true);
+
         token.burn(holder, 2, 20);
         assertEq(token.balanceOf(holder, 2), 30);
     }

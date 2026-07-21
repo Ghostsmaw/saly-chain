@@ -26,7 +26,11 @@ spec:
         {{- toYaml $ctx.Values.podAnnotations | nindent 8 }}
         prometheus.io/port: {{ $port | quote }}
     spec:
+      {{- if eq $name "signer" }}
+      serviceAccountName: {{ include "salychain.signerServiceAccountName" $ctx }}
+      {{- else }}
       serviceAccountName: {{ include "salychain.serviceAccountName" $ctx }}
+      {{- end }}
       {{- with $ctx.Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

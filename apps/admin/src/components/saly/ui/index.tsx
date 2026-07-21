@@ -17,8 +17,8 @@ export function SalyCard({
   return (
     <div
       className={cn(
-        'rounded-saly-lg border border-saly-border bg-saly-bg-card shadow-saly transition-all duration-200 ease-out',
-        hover && 'hover:border-saly-border-strong hover:shadow-saly-hover',
+        'saly-glass rounded-saly-lg transition-all duration-300 ease-out',
+        hover && 'hover:-translate-y-0.5 hover:border-saly-border-strong hover:shadow-saly-hover',
         padding && 'p-5',
         className,
       )}

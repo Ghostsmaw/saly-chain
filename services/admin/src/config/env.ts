@@ -16,6 +16,9 @@ export const adminEnvSchema = commonEnvSchema.extend({
   ADMIN_CONSOLE_URL: z.string().url().default('http://localhost:3001'),
   RESEND_API_KEY: z.string().min(8).optional(),
   RESEND_FROM_EMAIL: z.string().min(3).default('onboarding@resend.dev'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
+
 });
 
 export type AdminEnv = z.infer<typeof adminEnvSchema> & {

@@ -1,8 +1,9 @@
-import { Body, Controller, Headers, HttpCode, Post, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Headers, HttpCode, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, IsUUID, Length, Matches } from 'class-validator';
 import { loadEnv } from '@salychain/config';
 import { executionEnvSchema } from '../config/env.js';
+import { assertBearerToken } from '../common/assert-bearer.js';
 import { TransactionsService } from './transactions.service.js';
 
 class FiatWebhookConfirmationDto {
@@ -67,13 +68,11 @@ class FiatPayinConfirmationDto {
 
 function assertInternalToken(authorization: string | undefined): void {
   const env = loadEnv(executionEnvSchema);
-  const token = env.EXECUTION_INTERNAL_WEBHOOK_TOKEN;
-  if (!token) {
-    throw new UnauthorizedException('internal webhook endpoint is disabled');
-  }
-  if (authorization !== `Bearer ${token}`) {
-    throw new UnauthorizedException('invalid internal webhook token');
-  }
+  assertBearerToken(
+    authorization,
+    env.EXECUTION_INTERNAL_WEBHOOK_TOKEN,
+    'internal webhook endpoint is disabled',
+  );
 }
 
 @ApiTags('internal')

@@ -71,10 +71,27 @@ const preset = {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(100%)' },
         },
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        scaleIn: {
+          '0%': { opacity: '0', transform: 'scale(0.96) translateY(-4px)' },
+          '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
+        },
+        floatOrb: {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0) scale(1)' },
+          '33%': { transform: 'translate3d(30px, -24px, 0) scale(1.06)' },
+          '66%': { transform: 'translate3d(-20px, 18px, 0) scale(0.97)' },
+        },
       },
       animation: {
         'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
         shimmer: 'shimmer 2s linear infinite',
+        'fade-in-up': 'fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'scale-in': 'scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'float-slow': 'floatOrb 18s ease-in-out infinite',
+        'float-slower': 'floatOrb 26s ease-in-out infinite reverse',
       },
     },
   },

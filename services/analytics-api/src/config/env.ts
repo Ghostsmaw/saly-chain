@@ -11,6 +11,13 @@ export const analyticsApiEnvSchema = z.object({
   QUERY_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(10),
   QUERY_DEFAULT_LIMIT: z.coerce.number().int().positive().default(50),
   QUERY_MAX_LIMIT: z.coerce.number().int().positive().default(1_000),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
+  /**
+   * Scoped read token for the public explorer app. Accepted only on `/v1/data/*`.
+   * Never reuse INTERNAL_SERVICE_TOKEN in the explorer process.
+   */
+  EXPLORER_READ_TOKEN: z.string().min(16).optional(),
 });
 
 export type AnalyticsApiEnv = z.infer<typeof analyticsApiEnvSchema>;

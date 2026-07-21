@@ -35,12 +35,14 @@ function makePrismaMock(accounts: MockAccount[]) {
   const journalEntries: any[] = [];
   const postings: any[] = [];
   const audit: any[] = [];
+  const queryRawCalls: Array<{ values?: string[] }> = [];
 
   return {
     accountMap,
     journalEntries,
     postings,
     audit,
+    queryRawCalls,
     prisma: {
       journalEntry: {
         findUnique: vi.fn(async ({ where }: any) => {
@@ -53,6 +55,29 @@ function makePrismaMock(accounts: MockAccount[]) {
         }),
       },
       $transaction: vi.fn(async (fn: any) => fn({
+        // `SELECT ... FOR UPDATE`, simulated: the real query embeds each
+        // requested account id as a bound parameter, exposed on `.values`
+        // by Prisma's `sql` template tag.
+        $queryRaw: vi.fn(async (query: { values?: string[] }) => {
+          queryRawCalls.push(query);
+          const ids = query.values ?? [];
+          return ids
+            .map((id) => accountMap.get(id))
+            .filter((a): a is MockAccount => Boolean(a))
+            .map((a) => ({
+              id: a.id,
+              code: a.id,
+              type: a.type,
+              currency: a.currency,
+              owner_id: null,
+              owner_kind: null,
+              status: a.status,
+              balance_minor: a.balanceMinor,
+              metadata: a.metadata,
+              created_at: new Date(),
+              updated_at: new Date(),
+            }));
+        }),
         account: {
           findMany: vi.fn(async ({ where }: any) =>
             (where.id.in as string[]).map((id) => accountMap.get(id)).filter(Boolean),
@@ -218,6 +243,42 @@ describe('JournalService.post', () => {
       }),
       { code: 'ledger.entry.idempotency_conflict', category: 'CONFLICT' },
     );
+  });
+
+  it('locks every involved account with SELECT ... FOR UPDATE before checking solvency', async () => {
+    const { prisma, queryRawCalls } = makePrismaMock([cashAsset, userLiability]);
+    const svc = new JournalService(prisma as any);
+
+    await svc.post({
+      idempotency_key: 'idem-lock',
+      postings: [
+        { account_id: cashAsset.id, direction: 'DEBIT', amount_minor: '100', currency: 'USD' },
+        { account_id: userLiability.id, direction: 'CREDIT', amount_minor: '100', currency: 'USD' },
+      ],
+    });
+
+    expect(queryRawCalls).toHaveLength(1);
+    expect(queryRawCalls[0]?.values?.slice().sort()).toEqual(
+      [cashAsset.id, userLiability.id].sort(),
+    );
+  });
+
+  it('locks accounts in sorted id order to avoid cross-entry deadlocks', async () => {
+    // Postings listed high-id first; lock acquisition must still sort.
+    const high = { ...userLiability, id: 'acct_zzzz' };
+    const low = { ...cashAsset, id: 'acct_aaaa' };
+    const { prisma, queryRawCalls } = makePrismaMock([high, low]);
+    const svc = new JournalService(prisma as any);
+
+    await svc.post({
+      idempotency_key: 'idem-lock-order',
+      postings: [
+        { account_id: high.id, direction: 'CREDIT', amount_minor: '50', currency: 'USD' },
+        { account_id: low.id, direction: 'DEBIT', amount_minor: '50', currency: 'USD' },
+      ],
+    });
+
+    expect(queryRawCalls[0]?.values).toEqual([low.id, high.id].sort());
   });
 
   it('refuses postings on a frozen account', async () => {

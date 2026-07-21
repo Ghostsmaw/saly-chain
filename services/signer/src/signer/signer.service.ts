@@ -1,6 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { ConflictError, ErrorCodes, ExternalError, NotFoundError } from '@salychain/errors';
+import {
+  AuthorizationError,
+  ConflictError,
+  ErrorCodes,
+  ExternalError,
+  NotFoundError,
+} from '@salychain/errors';
 import { signerSignTotal } from '@salychain/observability';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { KMS_PROVIDER_TOKEN } from '../kms/kms.module.js';
@@ -9,6 +15,7 @@ import { EvmChainSigner } from '../chains/evm.signer.js';
 import { XrplChainSigner } from '../chains/xrpl.signer.js';
 import type { ChainSigner } from '../chains/chain.signer.js';
 import { PolicyEngine } from './policy.engine.js';
+import { assertUnsignedTxMatchesPolicy } from './tx-bind.js';
 import { CreateKeyDto, SignDto } from './dto.js';
 import type { SignerChain, SignerKey } from '../generated/prisma/index.js';
 import { ulid } from 'ulid';
@@ -116,43 +123,53 @@ export class SignerService {
     const chainSigner = this.requireChainSigner(dto.chain);
 
     // 3) Policy evaluation (no key material involved).
-    const effectivePolicy = dto.policy
-      ? {
-          destinationAllowlist: dto.policy.destination_allowlist,
-          perTxCapMinor:
-            dto.policy.per_tx_cap_minor === null || dto.policy.per_tx_cap_minor === undefined
-              ? null
-              : BigInt(dto.policy.per_tx_cap_minor),
-          dailyCapMinor:
-            dto.policy.daily_cap_minor === null || dto.policy.daily_cap_minor === undefined
-              ? null
-              : BigInt(dto.policy.daily_cap_minor),
-          approvalThresholdMinor:
-            dto.policy.approval_threshold_minor === null || dto.policy.approval_threshold_minor === undefined
-              ? null
-              : BigInt(dto.policy.approval_threshold_minor),
-          requiredApprovers: dto.policy.required_approvers,
-        }
-      : {
-          destinationAllowlist: ['*'],
-          perTxCapMinor: null,
-          dailyCapMinor: null,
-          approvalThresholdMinor: null,
-          requiredApprovers: 0,
-        };
+    // Fail closed: a missing policy used to default to allow-all / unlimited
+    // caps, which meant any caller who could reach the signer could drain a
+    // wallet. The wallet service always supplies the stored policy; reject
+    // anything else.
+    if (!dto.policy) {
+      const err = AuthorizationError(
+        'signer.policy.required',
+        'Signing policy is required — refusing allow-all default',
+      );
+      await this.recordRequest(dto, key, 'POLICY_DENIED', err);
+      throw err;
+    }
+
+    const effectivePolicy = {
+      destinationAllowlist: dto.policy.destination_allowlist.map((a) => a.toLowerCase()),
+      perTxCapMinor:
+        dto.policy.per_tx_cap_minor === null || dto.policy.per_tx_cap_minor === undefined
+          ? null
+          : BigInt(dto.policy.per_tx_cap_minor),
+      dailyCapMinor:
+        dto.policy.daily_cap_minor === null || dto.policy.daily_cap_minor === undefined
+          ? null
+          : BigInt(dto.policy.daily_cap_minor),
+      approvalThresholdMinor:
+        dto.policy.approval_threshold_minor === null || dto.policy.approval_threshold_minor === undefined
+          ? null
+          : BigInt(dto.policy.approval_threshold_minor),
+      requiredApprovers: dto.policy.required_approvers,
+    };
+
+    const policyContext = {
+      destinationChain: dto.policy_context.destination_chain,
+      destinationAddress: dto.policy_context.destination_address,
+      amountMinor: BigInt(dto.policy_context.amount_minor),
+      assetSymbol: dto.policy_context.asset_symbol,
+    };
 
     try {
       this.policy.evaluate({
         policy: effectivePolicy,
-        context: {
-          destinationChain: dto.policy_context.destination_chain,
-          destinationAddress: dto.policy_context.destination_address,
-          amountMinor: BigInt(dto.policy_context.amount_minor),
-          assetSymbol: dto.policy_context.asset_symbol,
-        },
+        context: policyContext,
         rolling24hSpentMinor: dto.rolling_24h_spent_minor ? BigInt(dto.rolling_24h_spent_minor) : 0n,
         approvers: dto.approvers ? Number(dto.approvers) : 0,
       });
+      // Bind context → unsigned bytes so a permissive context cannot authorize
+      // a different on-chain transfer.
+      assertUnsignedTxMatchesPolicy(dto.chain, dto.unsigned_tx, policyContext);
     } catch (err) {
       await this.recordRequest(dto, key, 'POLICY_DENIED', err);
       throw err;

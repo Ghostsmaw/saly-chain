@@ -243,8 +243,9 @@ export class TransfersService {
       memo: dto.memo,
     };
 
+    // BullMQ forbids `:` in custom job ids; execution uses `exec:<uuid>:transfer`.
     await this.queue.add(BROADCAST_JOB, payload, {
-      jobId: `broadcast:${dto.idempotency_key}`,
+      jobId: `broadcast_${dto.idempotency_key.replace(/:/g, '_')}`,
     });
 
     this.logger.log(`enqueued broadcast job ${job.id} for wallet ${wallet.id}`);

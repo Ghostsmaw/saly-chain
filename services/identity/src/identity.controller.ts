@@ -10,7 +10,9 @@ import {
   CreateUserDto,
   IssueTokenDto,
   LoginDto,
+  LogoutDto,
   InviteSuperAdminDto,
+  RefreshTokenDto,
   RevokeSuperAdminDto,
   RegisterDto,
   VerifyTokenDto,
@@ -83,12 +85,29 @@ export class IdentityController {
 
   @Post('auth/login')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Password login — returns a JWT session' })
+  @ApiOperation({ summary: 'Password login — returns access JWT + refresh token' })
   login(@Body() dto: LoginDto) {
     return this.auth.login({
       email: dto.email,
       password: dto.password,
       expectedRole: dto.expected_role,
+    });
+  }
+
+  @Post('auth/refresh')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Rotate refresh token and mint a new access JWT' })
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.auth.refresh(dto.refresh_token);
+  }
+
+  @Post('auth/logout')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Revoke refresh token and deny the access JWT by jti' })
+  logout(@Body() dto: LogoutDto) {
+    return this.auth.logout({
+      refreshToken: dto.refresh_token,
+      accessToken: dto.access_token,
     });
   }
 
@@ -110,8 +129,9 @@ export class IdentityController {
 
   @Post('auth/token')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Issue a JWT access token for a user (Saly AI consumer surface)' })
-  issueToken(@Body() dto: IssueTokenDto) {
+  @ApiOperation({ summary: 'Issue a JWT access token for a user (internal — trusted services only)' })
+  issueToken(@Headers('authorization') authorization: string | undefined, @Body() dto: IssueTokenDto) {
+    assertIdentityInternalAuth(authorization);
     return this.auth.issueToken(dto.user_id);
   }
 
@@ -129,8 +149,12 @@ export class IdentityController {
 
   @Post('delegations')
   @HttpCode(201)
-  @ApiOperation({ summary: 'Grant a user delegation over an agent' })
-  createDelegation(@Body() dto: CreateDelegationDto) {
+  @ApiOperation({ summary: 'Grant a user delegation over an agent (internal — trusted services only)' })
+  createDelegation(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() dto: CreateDelegationDto,
+  ) {
+    assertIdentityInternalAuth(authorization);
     return this.delegations.create({
       userId: dto.user_id,
       agentId: dto.agent_id,
@@ -140,12 +164,23 @@ export class IdentityController {
   }
 
   @Get('delegations')
-  listDelegations(@Query('user_id') userId?: string, @Query('agent_id') agentId?: string) {
+  @ApiOperation({ summary: 'List agent delegations (internal — trusted services only)' })
+  listDelegations(
+    @Headers('authorization') authorization: string | undefined,
+    @Query('user_id') userId?: string,
+    @Query('agent_id') agentId?: string,
+  ) {
+    assertIdentityInternalAuth(authorization);
     return this.delegations.list({ userId, agentId });
   }
 
   @Delete('delegations/:id')
-  revokeDelegation(@Param('id') id: string) {
+  @ApiOperation({ summary: 'Revoke an agent delegation (internal — trusted services only)' })
+  revokeDelegation(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    assertIdentityInternalAuth(authorization);
     return this.delegations.revoke(id);
   }
 }

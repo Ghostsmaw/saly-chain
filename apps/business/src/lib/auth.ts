@@ -1,50 +1,18 @@
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { IdentityClient, type AuthRole, type AuthSession } from '@salychain/sdk-internal';
+import { REFRESH_COOKIE, SESSION_COOKIE, verifySessionToken, type SessionUser } from './session';
+import { isSessionRevoked } from './session-revalidation';
 
 const IDENTITY_URL = process.env.IDENTITY_BASE_URL ?? 'http://localhost:4012';
-export const SESSION_COOKIE = 'saly_business_session';
-const SURFACE_ROLE: AuthRole = 'BUSINESS';
+const SURFACE_ROLE = 'BUSINESS' satisfies AuthRole;
+
+export { SESSION_COOKIE, REFRESH_COOKIE, type SessionUser };
 
 let client: IdentityClient | null = null;
 function identity(): IdentityClient {
   if (!client) client = new IdentityClient({ baseUrl: IDENTITY_URL });
   return client;
-}
-
-export interface SessionUser {
-  userId: string;
-  email: string;
-  role: AuthRole;
-  displayName: string | null;
-}
-
-interface CookiePayload {
-  token: string;
-  email: string;
-  role: AuthRole;
-  displayName: string | null;
-  userId: string;
-}
-
-function encode(session: AuthSession): string {
-  const payload: CookiePayload = {
-    token: session.access_token,
-    email: session.email,
-    role: session.role,
-    displayName: session.display_name,
-    userId: session.id,
-  };
-  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-}
-
-function decode(raw: string): CookiePayload | null {
-  try {
-    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as CookiePayload;
-    if (!parsed.token || !parsed.userId) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {
@@ -56,35 +24,83 @@ export async function register(input: {
   password: string;
   displayName?: string;
 }): Promise<AuthSession> {
-  return identity().register({ ...input, role: 'BUSINESS' });
+  return identity().register({ ...input, role: SURFACE_ROLE });
+}
+
+function cookieBase(maxAge: number) {
+  return {
+    httpOnly: true as const,
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV !== 'development',
+    path: '/',
+    maxAge,
+  };
 }
 
 export async function persistSession(session: AuthSession): Promise<void> {
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, encode(session), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: session.expires_in,
-  });
+  jar.set(SESSION_COOKIE, session.access_token, cookieBase(session.expires_in));
+  jar.set(REFRESH_COOKIE, session.refresh_token, cookieBase(session.refresh_expires_in));
 }
 
 export async function clearSession(): Promise<void> {
   const jar = await cookies();
+  const access = jar.get(SESSION_COOKIE)?.value;
+  const refresh = jar.get(REFRESH_COOKIE)?.value;
+  if (access || refresh) {
+    try {
+      await identity().logout({ accessToken: access, refreshToken: refresh });
+    } catch {
+      // best-effort
+    }
+  }
   jar.delete(SESSION_COOKIE);
+  jar.delete(REFRESH_COOKIE);
 }
 
 export async function getSession(): Promise<SessionUser | null> {
   const jar = await cookies();
-  const raw = jar.get(SESSION_COOKIE)?.value;
-  if (!raw) return null;
-  const payload = decode(raw);
-  if (!payload) return null;
-  return {
-    userId: payload.userId,
-    email: payload.email,
-    role: payload.role,
-    displayName: payload.displayName,
-  };
+  const access = jar.get(SESSION_COOKIE)?.value;
+  const session = await verifySessionToken(access);
+  if (session) return session;
+
+  const refresh = jar.get(REFRESH_COOKIE)?.value;
+  if (!refresh) return null;
+  try {
+    const renewed = await identity().refresh(refresh);
+    await persistSession(renewed);
+    return verifySessionToken(renewed.access_token);
+  } catch {
+    try {
+      jar.delete(SESSION_COOKIE);
+      jar.delete(REFRESH_COOKIE);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+}
+
+export async function requireSession(): Promise<SessionUser> {
+  const jar = await cookies();
+  let token = jar.get(SESSION_COOKIE)?.value;
+  let session = await verifySessionToken(token);
+
+  if (!session) {
+    const refreshed = await getSession();
+    if (!refreshed) redirect('/login');
+    token = (await cookies()).get(SESSION_COOKIE)?.value;
+    session = refreshed;
+  }
+
+  if (!session || !token) redirect('/login');
+  if (await isSessionRevoked(token)) {
+    try {
+      await clearSession();
+    } catch {
+      // ignore
+    }
+    redirect('/login');
+  }
+  return session;
 }

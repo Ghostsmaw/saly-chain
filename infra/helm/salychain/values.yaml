@@ -37,6 +37,13 @@ global:
     STABLECOIN_BASE_URL: http://stablecoin:4022
     CONTRACT_REGISTRY_BASE_URL: http://contract-registry:4013
     WALLET_BASE_URL: http://wallet:4002
+    FINANCE_BASE_URL: http://finance:4023
+    GOV_BASE_URL: http://gov:4024
+    AGRI_BASE_URL: http://agri:4025
+    SCM_BASE_URL: http://scm:4026
+    AVIATION_BASE_URL: http://aviation:4027
+    HEALTH_BASE_URL: http://health:4028
+    EDU_BASE_URL: http://edu:4029
     L3_NETWORK: saly-testnet
 
 # Defaults applied to every service/worker/app unless overridden per-item.
@@ -83,6 +90,13 @@ services:
   - { name: analytics-intelligence, port: 4019 }
   - { name: merchant, port: 4021 }
   - { name: stablecoin, port: 4022 }
+  - { name: finance, port: 4023 }
+  - { name: gov, port: 4024 }
+  - { name: agri, port: 4025 }
+  - { name: scm, port: 4026 }
+  - { name: aviation, port: 4027 }
+  - { name: health, port: 4028 }
+  - { name: edu, port: 4029 }
   - { name: signer, port: 4099, replicas: 2 }
 
 # --- Background workers (no public API; expose /metrics + /health) ------------
@@ -113,9 +127,26 @@ ingress:
   annotations: {}
   tls: []
 
+# --- Network segmentation -----------------------------------------------------
+# Default-deny ingress + explicit allows (see templates/networkpolicies.yaml).
+# Requires a CNI that enforces NetworkPolicy (Calico, Cilium, ...).
+networkPolicy:
+  enabled: true
+  # Namespace labels identifying the ingress controller (gateway + web apps edge).
+  ingressControllerNamespaceLabels:
+    kubernetes.io/metadata.name: ingress-nginx
+  # Namespace labels identifying the monitoring stack (Prometheus scrapes).
+  monitoringNamespaceLabels:
+    kubernetes.io/metadata.name: monitoring
+
 serviceAccount:
   create: true
   name: ""
+  # Annotate with the IRSA role ARN that may call kms:Decrypt on the signer CMK.
+  # Never attach that role to the shared platform SA — only this signer SA.
+  signer:
+    annotations: {}
+    # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/salychain-signer-kms
 
 podAnnotations:
   prometheus.io/scrape: "true"

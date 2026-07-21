@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { JournalEntry, Posting, Prisma } from '../generated/prisma/index.js';
+import { Account, JournalEntry, Posting, Prisma } from '../generated/prisma/index.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   ConflictError,
@@ -49,8 +49,19 @@ export class JournalService {
 
     return await this.prisma.$transaction(async (tx) => {
       // Lock involved accounts to serialize concurrent posts on the same account.
-      const accountIds = Array.from(new Set(dto.postings.map((p) => p.account_id)));
-      const accounts = await tx.account.findMany({ where: { id: { in: accountIds } } });
+      //
+      // A plain `findMany` here would read balances via an unlocked snapshot:
+      // two concurrent postings against the same account could both read the
+      // pre-post balance, both pass the solvency check below, and both commit
+      // — overdrawing the account past its allowed limit even though each
+      // individual `increment` is atomic. `SELECT ... FOR UPDATE` blocks any
+      // other transaction from reading/locking the same rows until this one
+      // commits or rolls back, so the solvency check below always sees the
+      // latest committed balance. Accounts are locked in a stable (id) order
+      // across all callers to avoid lock-ordering deadlocks when two entries
+      // touch overlapping account sets in different orders.
+      const accountIds = Array.from(new Set(dto.postings.map((p) => p.account_id))).sort();
+      const accounts = await this.lockAccountsForUpdate(tx, accountIds);
       const accountMap = new Map(accounts.map((a) => [a.id, a]));
 
       for (const id of accountIds) {
@@ -239,6 +250,56 @@ export class JournalService {
   }
 
   // ─────────────────────── helpers ───────────────────────
+
+  /**
+   * Locks accounts with `SELECT ... FOR UPDATE` inside the caller's
+   * transaction so their balances cannot be read or changed by any other
+   * transaction until this one finishes. Returns full `Account` rows.
+   *
+   * `accountIds` MUST be pre-sorted by the caller so every concurrent
+   * transaction acquires locks in the same order, preventing deadlocks.
+   */
+  private async lockAccountsForUpdate(
+    tx: Prisma.TransactionClient,
+    accountIds: string[],
+  ): Promise<Account[]> {
+    if (accountIds.length === 0) return [];
+    const rows = await tx.$queryRaw<
+      Array<{
+        id: string;
+        code: string;
+        type: Account['type'];
+        currency: string;
+        owner_id: string | null;
+        owner_kind: string | null;
+        status: Account['status'];
+        balance_minor: bigint | string;
+        metadata: Prisma.JsonValue;
+        created_at: Date;
+        updated_at: Date;
+      }>
+    >(Prisma.sql`
+      SELECT id, code, type, currency, owner_id, owner_kind, status,
+             balance_minor, metadata, created_at, updated_at
+      FROM accounts
+      WHERE id IN (${Prisma.join(accountIds.map((id) => Prisma.sql`${id}::uuid`))})
+      ORDER BY id ASC
+      FOR UPDATE
+    `);
+    return rows.map((r) => ({
+      id: r.id,
+      code: r.code,
+      type: r.type,
+      currency: r.currency,
+      ownerId: r.owner_id,
+      ownerKind: r.owner_kind,
+      status: r.status,
+      balanceMinor: BigInt(r.balance_minor),
+      metadata: r.metadata,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+  }
 
   private validateShape(dto: PostJournalEntryDto): void {
     if (dto.postings.length < 2) {

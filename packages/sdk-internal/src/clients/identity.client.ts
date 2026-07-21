@@ -34,6 +34,8 @@ export interface AuthSession {
   access_token: string;
   expires_in: number;
   token_type: 'Bearer';
+  refresh_token: string;
+  refresh_expires_in: number;
 }
 
 export interface SuperAdminInviteResult {
@@ -160,16 +162,47 @@ export class IdentityClient {
     );
   }
 
-  issueToken(userId: string, options?: RequestOptions): Promise<TokenResponse> {
-    return this.http.post('/v1/auth/token', { user_id: userId }, options);
+  /** Mint a JWT for a user. Internal-only: requires the identity internal admin token. */
+  issueToken(userId: string, internalToken?: string, options?: RequestOptions): Promise<TokenResponse> {
+    return this.http.post(
+      '/v1/auth/token',
+      { user_id: userId },
+      {
+        ...options,
+        headers: {
+          ...(options?.headers ?? {}),
+          ...(internalToken ? { authorization: `Bearer ${internalToken}` } : {}),
+        },
+      },
+    );
   }
 
   verifyToken(token: string, options?: RequestOptions): Promise<VerifyTokenResult> {
     return this.http.post('/v1/auth/verify', { token }, options);
   }
 
+  refresh(refreshToken: string, options?: RequestOptions): Promise<AuthSession> {
+    return this.http.post('/v1/auth/refresh', { refresh_token: refreshToken }, options);
+  }
+
+  logout(
+    input: { refreshToken?: string; accessToken?: string } = {},
+    options?: RequestOptions,
+  ): Promise<{ revoked: boolean }> {
+    return this.http.post(
+      '/v1/auth/logout',
+      {
+        ...(input.refreshToken ? { refresh_token: input.refreshToken } : {}),
+        ...(input.accessToken ? { access_token: input.accessToken } : {}),
+      },
+      options,
+    );
+  }
+
+  /** Grant an agent delegation. Internal-only: requires the identity internal admin token. */
   createDelegation(
     input: { userId: string; agentId: string; scopes?: string[]; expiresAt?: string },
+    internalToken?: string,
     options?: RequestOptions,
   ): Promise<DelegationDto> {
     return this.http.post(
@@ -180,14 +213,40 @@ export class IdentityClient {
         scopes: input.scopes,
         expires_at: input.expiresAt,
       },
-      options,
+      {
+        ...options,
+        headers: {
+          ...(options?.headers ?? {}),
+          ...(internalToken ? { authorization: `Bearer ${internalToken}` } : {}),
+        },
+      },
     );
   }
 
-  listDelegations(input?: { userId?: string; agentId?: string }, options?: RequestOptions): Promise<{ data: DelegationDto[] }> {
+  /** List agent delegations. Internal-only: requires the identity internal admin token. */
+  listDelegations(
+    input?: { userId?: string; agentId?: string },
+    internalToken?: string,
+    options?: RequestOptions,
+  ): Promise<{ data: DelegationDto[] }> {
     return this.http.get('/v1/delegations', {
       ...options,
       query: { user_id: input?.userId, agent_id: input?.agentId },
+      headers: {
+        ...(options?.headers ?? {}),
+        ...(internalToken ? { authorization: `Bearer ${internalToken}` } : {}),
+      },
+    });
+  }
+
+  /** Revoke an agent delegation. Internal-only: requires the identity internal admin token. */
+  revokeDelegation(id: string, internalToken?: string, options?: RequestOptions): Promise<void> {
+    return this.http.delete(`/v1/delegations/${id}`, {
+      ...options,
+      headers: {
+        ...(options?.headers ?? {}),
+        ...(internalToken ? { authorization: `Bearer ${internalToken}` } : {}),
+      },
     });
   }
 

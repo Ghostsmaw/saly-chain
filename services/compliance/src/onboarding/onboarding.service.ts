@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { NotFoundError, ValidationError } from '@salychain/errors';
 import { ulid } from 'ulid';
 import { CasePriority, CaseStatus, Prisma, SubjectKind, VerificationTier } from '../generated/prisma/index.js';
+import { PII_VAULT, PiiVault } from '../crypto/pii-vault.js';
 import { KycService } from '../kyc/kyc.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
@@ -46,7 +47,50 @@ export class OnboardingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly kyc: KycService,
+    @Inject(PII_VAULT) private readonly pii: PiiVault,
   ) {}
+
+  /** Decrypt sealed step payloads after loading from the DB. */
+  private hydrateMetadata(raw: unknown): OnboardingMetadata | null {
+    const metadata = parseMetadata(raw);
+    if (!metadata) return null;
+    for (const step of Object.values(metadata.steps)) {
+      if (step.data !== undefined) {
+        step.data = this.pii.openJson<Record<string, unknown>>(step.data);
+      }
+    }
+    if (metadata.ocr) {
+      const opened: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(metadata.ocr)) {
+        opened[key] = this.pii.openJson(value);
+      }
+      metadata.ocr = opened;
+    }
+    return metadata;
+  }
+
+  /** Encrypt step payloads before persisting metadata JSON. */
+  private sealMetadata(metadata: OnboardingMetadata): OnboardingMetadata {
+    const sealed: OnboardingMetadata = {
+      ...metadata,
+      steps: {},
+      ...(metadata.ocr ? { ocr: {} } : {}),
+    };
+    for (const [key, step] of Object.entries(metadata.steps)) {
+      sealed.steps[key] = {
+        ...step,
+        ...(step.data !== undefined
+          ? { data: this.pii.sealJson(step.data) as Record<string, unknown> }
+          : {}),
+      };
+    }
+    if (metadata.ocr && sealed.ocr) {
+      for (const [key, value] of Object.entries(metadata.ocr)) {
+        sealed.ocr[key] = this.pii.sealJson(value);
+      }
+    }
+    return sealed;
+  }
 
   async start(input: {
     externalRef: string;
@@ -68,7 +112,7 @@ export class OnboardingService {
       where: { externalRef: input.externalRef },
     });
 
-    const metadata = parseMetadata(existing?.metadata);
+    const metadata = this.hydrateMetadata(existing?.metadata);
     if (metadata?.status === 'pending_review' || metadata?.status === 'complete') {
       return this.toPublic(existing!, metadata);
     }
@@ -90,19 +134,20 @@ export class OnboardingService {
       started_at: metadata?.started_at ?? new Date().toISOString(),
     };
 
+    const stored = this.sealMetadata(nextMetadata);
     const subject = await this.prisma.complianceSubject.upsert({
       where: { externalRef: input.externalRef },
       update: {
         displayName: input.displayName ?? undefined,
         kind,
-        metadata: nextMetadata as unknown as Prisma.InputJsonValue,
+        metadata: stored as unknown as Prisma.InputJsonValue,
       },
       create: {
         externalRef: input.externalRef,
         kind,
         displayName: input.displayName ?? null,
         tier: VerificationTier.TIER_0,
-        metadata: nextMetadata as unknown as Prisma.InputJsonValue,
+        metadata: stored as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -115,7 +160,7 @@ export class OnboardingService {
     if (!subject) {
       return emptyStatus(externalRef);
     }
-    const metadata = parseMetadata(subject.metadata);
+    const metadata = this.hydrateMetadata(subject.metadata);
     if (!metadata) return emptyStatus(externalRef);
     return this.toPublic(subject, metadata);
   }
@@ -124,7 +169,7 @@ export class OnboardingService {
     const subject = await this.prisma.complianceSubject.findUnique({ where: { externalRef } });
     if (!subject) throw NotFoundError('compliance.subject_not_found', `Subject ${externalRef} not found`);
 
-    const metadata = parseMetadata(subject.metadata);
+    const metadata = this.hydrateMetadata(subject.metadata);
     if (!metadata) {
       throw ValidationError('compliance.onboarding.not_started', 'Onboarding has not been started');
     }
@@ -162,7 +207,7 @@ export class OnboardingService {
       data: {
         displayName: pickDisplayName(metadata, subject.displayName),
         countryCode: pickCountryCode(metadata) ?? subject.countryCode,
-        metadata: metadata as unknown as Prisma.InputJsonValue,
+        metadata: this.sealMetadata(metadata) as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -178,7 +223,7 @@ export class OnboardingService {
     const subject = await this.prisma.complianceSubject.findUnique({ where: { externalRef } });
     if (!subject) throw NotFoundError('compliance.subject_not_found', `Subject ${externalRef} not found`);
 
-    const metadata = parseMetadata(subject.metadata);
+    const metadata = this.hydrateMetadata(subject.metadata);
     if (!metadata) {
       throw ValidationError('compliance.onboarding.not_started', 'Onboarding has not been started');
     }
@@ -199,7 +244,7 @@ export class OnboardingService {
 
     const updated = await this.prisma.complianceSubject.update({
       where: { externalRef },
-      data: { metadata: metadata as unknown as Prisma.InputJsonValue },
+      data: { metadata: this.sealMetadata(metadata) as unknown as Prisma.InputJsonValue },
     });
 
     this.logger.log(`Onboarding ${decision} for ${externalRef}${reviewerRef ? ` by ${reviewerRef}` : ''}`);
@@ -211,7 +256,7 @@ export class OnboardingService {
     const subject = await this.prisma.complianceSubject.findUnique({ where: { externalRef } });
     if (!subject) throw NotFoundError('compliance.subject_not_found', `Subject ${externalRef} not found`);
 
-    const metadata = parseMetadata(subject.metadata);
+    const metadata = this.hydrateMetadata(subject.metadata);
     if (!metadata) {
       throw ValidationError('compliance.onboarding.not_started', 'Onboarding has not been started');
     }
@@ -233,7 +278,7 @@ export class OnboardingService {
 
     const updated = await this.prisma.complianceSubject.update({
       where: { externalRef },
-      data: { metadata: metadata as unknown as Prisma.InputJsonValue },
+      data: { metadata: this.sealMetadata(metadata) as unknown as Prisma.InputJsonValue },
     });
 
     return this.toPublic(updated, metadata);

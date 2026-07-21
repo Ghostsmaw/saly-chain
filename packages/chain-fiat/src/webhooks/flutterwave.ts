@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import type { FiatWebhookOutcome, ParsedFiatPayin, ParsedFiatWebhook } from './paystack.js';
 
@@ -23,6 +23,10 @@ const FAILED_STATUSES = new Set(['FAILED', 'CANCELLED']);
 
 /**
  * Verify Flutterwave webhook via the dashboard secret hash (`verif-hash` header).
+ * Note: Flutterwave's native scheme is shared-secret equality, not body HMAC.
+ * Prefer {@link verifyFlutterwaveWebhookBodyHmac} as a defense-in-depth layer
+ * when a reverse proxy or FLW sidecar can stamp `x-saly-flw-body-hmac`.
+ *
  * @see https://developer.flutterwave.com/docs/integration-guides/webhooks/
  */
 export function verifyFlutterwaveWebhookSignature(
@@ -33,6 +37,27 @@ export function verifyFlutterwaveWebhookSignature(
   try {
     const a = Buffer.from(verifHash, 'utf8');
     const b = Buffer.from(secretHash, 'utf8');
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Body-bound HMAC (HMAC-SHA256 hex of the raw request body under the secret).
+ * Used when an edge proxy stamps `x-saly-flw-body-hmac`, binding the payload
+ * so a stolen `verif-hash` alone cannot forge arbitrary settlement events.
+ */
+export function verifyFlutterwaveWebhookBodyHmac(
+  rawBody: string | Buffer,
+  secretHash: string,
+  bodyHmacHeader: string | undefined,
+): boolean {
+  if (!bodyHmacHeader || !secretHash) return false;
+  const expected = createHmac('sha256', secretHash).update(rawBody).digest('hex');
+  try {
+    const a = Buffer.from(bodyHmacHeader, 'utf8');
+    const b = Buffer.from(expected, 'utf8');
     return a.length === b.length && timingSafeEqual(a, b);
   } catch {
     return false;

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { ulid } from 'ulid';
 import { submitL3Payout } from '@/lib/api';
 import type { L3PayoutActionResult } from '@/components/L3PayoutForm';
+import { requireSession } from '@/lib/auth';
 
 function majorToMinor(amount: string, decimals = 2): string {
   const parts = amount.trim().split('.');
@@ -13,6 +14,7 @@ function majorToMinor(amount: string, decimals = 2): string {
 }
 
 export async function runL3Payout(formData: FormData): Promise<L3PayoutActionResult> {
+  await requireSession();
   const walletId = String(formData.get('wallet_id') ?? '').trim();
   const destinationAddress = String(formData.get('destination_address') ?? '').trim();
   const amount = String(formData.get('amount') ?? '').trim();

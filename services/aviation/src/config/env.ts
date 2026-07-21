@@ -11,6 +11,9 @@ export const aviationEnvSchema = commonEnvSchema.extend({
   CONTRACT_REGISTRY_BASE_URL: z.string().url().default('http://localhost:4013'),
   NATS_URL: z.string().default('nats://localhost:4222'),
   ID_PREFIX: z.string().default('avn_'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
+
 });
 
 export type AviationEnv = z.infer<typeof aviationEnvSchema>;

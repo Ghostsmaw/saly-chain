@@ -11,6 +11,9 @@ export const contractRegistryEnvSchema = commonEnvSchema.extend({
   L3_L3_RPC_URL: z.string().url().optional(),
   L3_ATTESTATION_REGISTRY_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
   GOVERNANCE_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(15_000),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
+
 });
 
 export type ContractRegistryEnv = z.infer<typeof contractRegistryEnvSchema>;

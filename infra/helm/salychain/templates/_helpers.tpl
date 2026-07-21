@@ -15,6 +15,11 @@
 {{- end -}}
 {{- end -}}
 
+{{/* Dedicated SA for the signer — never share IRSA/KMS with public workloads. */}}
+{{- define "salychain.signerServiceAccountName" -}}
+{{- printf "%s-signer-sa" .Release.Name -}}
+{{- end -}}
+
 {{/* Standard labels */}}
 {{- define "salychain.labels" -}}
 app.kubernetes.io/part-of: salychain

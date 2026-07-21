@@ -12,6 +12,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequireScopes, ScopeGuard } from '../auth/scope.guard.js';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import { enforceOrgScope } from '../auth/org-scope.js';
 import { gatewayEnvSchema } from '../config/env.js';
 import { loadEnv } from '@salychain/config';
 
@@ -42,7 +43,7 @@ export class VerticalsController {
   financeInstrument(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
     return proxyPost(env.FINANCE_BASE_URL, '/v1/finance/instruments', {
       ...body,
-      org_id: body.org_id ?? req.auth?.org_id,
+      org_id: enforceOrgScope(req, body.org_id),
     });
   }
 
@@ -57,7 +58,7 @@ export class VerticalsController {
   @HttpCode(201)
   @RequireScopes('gov:write')
   govProgram(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
-    return proxyPost(env.GOV_BASE_URL, '/v1/gov/programs', { ...body, org_id: body.org_id ?? req.auth?.org_id });
+    return proxyPost(env.GOV_BASE_URL, '/v1/gov/programs', { ...body, org_id: enforceOrgScope(req, body.org_id) });
   }
 
   @Get('gov/transparency/:programId')
@@ -71,7 +72,7 @@ export class VerticalsController {
   @HttpCode(201)
   @RequireScopes('agri:write')
   agriLot(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
-    return proxyPost(env.AGRI_BASE_URL, '/v1/agri/lots', { ...body, org_id: body.org_id ?? req.auth?.org_id });
+    return proxyPost(env.AGRI_BASE_URL, '/v1/agri/lots', { ...body, org_id: enforceOrgScope(req, body.org_id) });
   }
 
   @Get('agri/lots/:id/trace')
@@ -85,7 +86,7 @@ export class VerticalsController {
   @HttpCode(201)
   @RequireScopes('scm:write')
   scmShipment(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
-    return proxyPost(env.SCM_BASE_URL, '/v1/scm/shipments', { ...body, org_id: body.org_id ?? req.auth?.org_id });
+    return proxyPost(env.SCM_BASE_URL, '/v1/scm/shipments', { ...body, org_id: enforceOrgScope(req, body.org_id) });
   }
 
   @Get('scm/shipments/:id/trace')
@@ -99,7 +100,7 @@ export class VerticalsController {
   @HttpCode(201)
   @RequireScopes('aviation:write')
   aviationPart(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
-    return proxyPost(env.AVIATION_BASE_URL, '/v1/aviation/parts', { ...body, org_id: body.org_id ?? req.auth?.org_id });
+    return proxyPost(env.AVIATION_BASE_URL, '/v1/aviation/parts', { ...body, org_id: enforceOrgScope(req, body.org_id) });
   }
 
   @Get('aviation/parts/:serial/history')
@@ -113,7 +114,7 @@ export class VerticalsController {
   @HttpCode(201)
   @RequireScopes('health:write')
   healthConsent(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
-    return proxyPost(env.HEALTH_BASE_URL, '/v1/health/consent', { ...body, org_id: body.org_id ?? req.auth?.org_id });
+    return proxyPost(env.HEALTH_BASE_URL, '/v1/health/consent', { ...body, org_id: enforceOrgScope(req, body.org_id) });
   }
 
   @Get('health/consent/verify/:id')
@@ -127,7 +128,7 @@ export class VerticalsController {
   @HttpCode(201)
   @RequireScopes('edu:write')
   eduCredential(@Req() req: AuthenticatedRequest, @Body() body: Record<string, unknown>) {
-    return proxyPost(env.EDU_BASE_URL, '/v1/edu/credentials/issue', { ...body, org_id: body.org_id ?? req.auth?.org_id });
+    return proxyPost(env.EDU_BASE_URL, '/v1/edu/credentials/issue', { ...body, org_id: enforceOrgScope(req, body.org_id) });
   }
 
   @Get('edu/credentials/verify/:id')

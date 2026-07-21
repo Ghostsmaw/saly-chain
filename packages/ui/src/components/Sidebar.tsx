@@ -38,7 +38,9 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        'flex h-screen w-64 shrink-0 flex-col border-r border-surface-border bg-[color:rgb(14_10_38_/_0.9)] backdrop-blur',
+        'sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-white/[0.06]',
+        'bg-[color:rgb(14_10_38_/_0.6)] backdrop-blur-xl backdrop-saturate-150',
+        'shadow-[inset_-1px_0_0_rgba(255,255,255,0.03)]',
         className,
       )}
     >
@@ -48,7 +50,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onCollapse}
-            className="grid h-7 w-7 place-items-center rounded-md text-text-tertiary hover:bg-surface-cardHover hover:text-text-primary"
+            className="grid h-7 w-7 place-items-center rounded-md text-text-tertiary transition-colors hover:bg-surface-cardHover hover:text-text-primary"
             aria-label="Collapse sidebar"
           >
             <ChevronsLeft className="h-4 w-4" />
@@ -61,17 +63,30 @@ export function Sidebar({
             const Icon = item.icon;
             const active = item.key === activeKey;
             const linkClass = cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+              'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200',
               active
-                ? 'bg-brand-500/15 text-text-primary shadow-glow'
-                : 'text-text-secondary hover:bg-surface-cardHover hover:text-text-primary',
+                ? 'bg-gradient-to-r from-brand-500/25 via-brand-500/10 to-transparent text-text-primary'
+                : 'text-text-secondary hover:bg-white/[0.04] hover:pl-3.5 hover:text-text-primary',
             );
             return (
               <li key={item.key}>
                 {renderLink(
                   item,
                   <>
-                    <Icon className={cn('h-4 w-4', active ? 'text-brand-300' : 'text-text-tertiary')} />
+                    {/* Active rail indicator */}
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand-gradient transition-all duration-300',
+                        active ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0',
+                      )}
+                    />
+                    <Icon
+                      className={cn(
+                        'h-4 w-4 transition-colors duration-200',
+                        active ? 'text-brand-300 drop-shadow-[0_0_6px_rgba(129,89,255,0.6)]' : 'text-text-tertiary group-hover:text-text-secondary',
+                      )}
+                    />
                     <span className="truncate">{item.label}</span>
                   </>,
                   linkClass,
@@ -81,7 +96,7 @@ export function Sidebar({
           })}
         </ul>
       </nav>
-      {footer ? <div className="border-t border-surface-border px-4 py-4">{footer}</div> : null}
+      {footer ? <div className="border-t border-white/[0.06] px-4 py-4">{footer}</div> : null}
     </aside>
   );
 }

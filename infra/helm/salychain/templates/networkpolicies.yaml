@@ -1,0 +1,135 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $ctx := . }}
+{{/*
+Network segmentation for the platform namespace.
+
+Model:
+  1. Default-deny ingress for every pod in this release. ClusterIP alone is
+     NOT a security boundary — without these policies any workload in the
+     cluster can reach ledger/wallet/signer directly.
+  2. Internal services and workers accept traffic only from pods of this
+     release (the gateway is the sole external entry point). The signer is
+     carved out of that blanket rule and locked to the wallet service alone.
+  3. The gateway and web apps additionally accept traffic from the ingress
+     controller namespace.
+  4. Metrics ports stay scrapeable from the monitoring namespace.
+
+Egress is intentionally not restricted here: services need DNS, managed
+databases, PSPs and chain RPCs; an egress allow-list is environment-specific
+and belongs in the environment values files.
+*/}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-default-deny-ingress
+  labels:
+    {{- include "salychain.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: ["Ingress"]
+---
+# Intra-platform traffic: every component except the signer accepts requests
+# from any pod of this release. Service-level auth (INTERNAL_SERVICE_TOKEN)
+# remains the second factor on top of this network boundary.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-intra-platform
+  labels:
+    {{- include "salychain.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: NotIn, values: ["signer"] }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+---
+# Signer holds key material: only the wallet service may reach it, and only
+# on its HTTP port. Nothing else — not even other platform services.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-signer-wallet-only
+  labels:
+    {{- include "salychain.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: signer
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/name: wallet
+      ports:
+        - protocol: TCP
+          port: 4099
+---
+# Public edge: ingress controller → gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-ingress-to-gateway
+  labels:
+    {{- include "salychain.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: gateway
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressControllerNamespaceLabels | nindent 14 }}
+---
+# Public edge: ingress controller → web apps.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-ingress-to-apps
+  labels:
+    {{- include "salychain.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: web
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressControllerNamespaceLabels | nindent 14 }}
+---
+# Observability: Prometheus in the monitoring namespace scrapes every pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-monitoring-scrape
+  labels:
+    {{- include "salychain.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.monitoringNamespaceLabels | nindent 14 }}
+{{- end }}

@@ -19,6 +19,8 @@ export const walletEnvSchema = z.object({
   ESCROW_CONTRACT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
   /** Bearer token for internal admin calls (execution → wallet escrow resolve). */
   WALLET_INTERNAL_ADMIN_TOKEN: z.string().min(16).optional(),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
   XRPL_NETWORK: z.enum(['xrpl-mainnet', 'xrpl-testnet', 'xrpl-devnet']).default('xrpl-testnet'),
   XRPL_WS_URL: z.string().default('wss://s.altnet.rippletest.net:51233'),
   /** JSON map of IOU currency → issuer address, e.g. `{"USD":"rhub8…"}`. */

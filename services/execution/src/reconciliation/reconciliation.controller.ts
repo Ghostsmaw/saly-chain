@@ -7,20 +7,16 @@ import {
   ParseIntPipe,
   Post,
   Query,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { loadEnv } from '@salychain/config';
 import { executionEnvSchema } from '../config/env.js';
+import { assertBearerToken } from '../common/assert-bearer.js';
 import { ReconciliationService } from './reconciliation.service.js';
 
 function assertAdmin(authorization: string | undefined): void {
   const env = loadEnv(executionEnvSchema);
-  const token = env.EXECUTION_ADMIN_TOKEN;
-  if (!token) throw new UnauthorizedException('reconciliation admin API is disabled');
-  if (authorization !== `Bearer ${token}`) {
-    throw new UnauthorizedException('invalid admin token');
-  }
+  assertBearerToken(authorization, env.EXECUTION_ADMIN_TOKEN, 'reconciliation admin API is disabled');
 }
 
 @ApiTags('reconciliation')

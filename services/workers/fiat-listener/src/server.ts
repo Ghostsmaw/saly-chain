@@ -4,6 +4,7 @@ import {
   parseFlutterwaveTransferWebhook,
   parsePaystackPayinWebhook,
   parsePaystackTransferWebhook,
+  verifyFlutterwaveWebhookBodyHmac,
   verifyFlutterwaveWebhookSignature,
   verifyPaystackWebhookSignature,
 } from '@salychain/chain-fiat';
@@ -26,10 +27,28 @@ function readRawBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
+/**
+ * Client IP resolved the same way Express `trust proxy` does: walk the chain
+ * [XFF entries..., socket address] from the right, skipping exactly
+ * TRUSTED_PROXY_HOPS trusted proxies. Taking the LEFTMOST XFF entry would let
+ * any caller spoof past the IP allow-list by prepending a header value.
+ */
 function clientIp(req: IncomingMessage): string {
+  const socketIp = req.socket.remoteAddress ?? '';
+  const hops = env.TRUSTED_PROXY_HOPS;
+  if (hops === 0) return socketIp;
+
   const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') return forwarded.split(',')[0]!.trim();
-  return req.socket.remoteAddress ?? '';
+  const entries =
+    typeof forwarded === 'string'
+      ? forwarded
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+  const chain = [...entries, socketIp];
+  const index = Math.max(chain.length - 1 - hops, 0);
+  return chain[index]!;
 }
 
 function assertAllowedIp(req: IncomingMessage): void {
@@ -99,6 +118,17 @@ async function handleFlutterwave(req: IncomingMessage, res: ServerResponse): Pro
     )
   ) {
     json(res, 401, { error: 'invalid_signature' });
+    return;
+  }
+
+  const bodyHmac = req.headers['x-saly-flw-body-hmac'];
+  const bodyHmacOk = verifyFlutterwaveWebhookBodyHmac(
+    raw,
+    env.FLUTTERWAVE_WEBHOOK_SECRET,
+    typeof bodyHmac === 'string' ? bodyHmac : undefined,
+  );
+  if (env.FLUTTERWAVE_REQUIRE_BODY_HMAC && !bodyHmacOk) {
+    json(res, 401, { error: 'invalid_body_hmac' });
     return;
   }
 

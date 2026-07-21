@@ -15,9 +15,11 @@ curl -s -X POST http://localhost:4012/v1/users \
   -H 'Content-Type: application/json' \
   -d '{"email":"agent-owner@example.com"}' | jq
 
-# Issue JWT (dev bootstrap — production uses OAuth)
+# Issue JWT (internal endpoint — requires IDENTITY_INTERNAL_ADMIN_TOKEN; production uses OAuth)
 export USER_ID=usr_…   # from step above
+export IDENTITY_INTERNAL_ADMIN_TOKEN=dev-identity-internal-admin-token-change-me
 export JWT=$(curl -s -X POST http://localhost:4012/v1/auth/token \
+  -H "Authorization: Bearer $IDENTITY_INTERNAL_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   -d "{\"user_id\":\"$USER_ID\"}" | jq -r .access_token)
 ```
@@ -71,6 +73,7 @@ curl -s -X POST http://localhost:4012/v1/delegations \
 
 # Re-issue JWT so agent_ids claim is fresh
 export JWT=$(curl -s -X POST http://localhost:4012/v1/auth/token \
+  -H "Authorization: Bearer $IDENTITY_INTERNAL_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   -d "{\"user_id\":\"$USER_ID\"}" | jq -r .access_token)
 ```

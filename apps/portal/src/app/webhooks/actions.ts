@@ -9,6 +9,7 @@ import {
   setWebhookSubscriptionStatus,
 } from '@/lib/api';
 import { PORTAL_WEBHOOK_SUBJECTS } from '@/lib/constants';
+import { requireSession } from '@/lib/auth';
 
 export type PortalActionResult =
   | { ok: true; message?: string; secret?: string; secretLabel?: string }
@@ -25,6 +26,7 @@ function parseSubjects(raw: FormDataEntryValue | null): string[] {
 }
 
 export async function createWebhookAction(formData: FormData): Promise<PortalActionResult> {
+  await requireSession();
   const url = String(formData.get('url') ?? '').trim();
   const description = String(formData.get('description') ?? '').trim() || undefined;
   const subjects = parseSubjects(formData.get('subjects'));
@@ -47,6 +49,7 @@ export async function createWebhookAction(formData: FormData): Promise<PortalAct
 }
 
 export async function rotateWebhookSecretAction(formData: FormData): Promise<PortalActionResult> {
+  await requireSession();
   const id = String(formData.get('subscription_id') ?? '');
   if (!id) return { ok: false, error: 'Missing subscription id.' };
 
@@ -65,6 +68,7 @@ export async function rotateWebhookSecretAction(formData: FormData): Promise<Por
 }
 
 export async function setWebhookStatusAction(formData: FormData): Promise<PortalActionResult> {
+  await requireSession();
   const id = String(formData.get('subscription_id') ?? '');
   const status = String(formData.get('status') ?? '') as 'ACTIVE' | 'PAUSED' | 'DISABLED';
   if (!id) return { ok: false, error: 'Missing subscription id.' };
@@ -83,6 +87,7 @@ export async function setWebhookStatusAction(formData: FormData): Promise<Portal
 }
 
 export async function deleteWebhookAction(formData: FormData): Promise<PortalActionResult> {
+  await requireSession();
   const id = String(formData.get('subscription_id') ?? '');
   if (!id) return { ok: false, error: 'Missing subscription id.' };
 

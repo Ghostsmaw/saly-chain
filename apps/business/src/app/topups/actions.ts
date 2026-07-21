@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { ulid } from 'ulid';
 import { businessNgnTreasuryAccountRef } from '@/lib/constants';
 import { submitTopupIntent } from '@/lib/api';
+import { requireSession } from '@/lib/auth';
 
 function majorToMinor(amount: string, currency: string): string {
   const decimals = currency === 'XRP' ? 6 : 2;
@@ -14,6 +15,7 @@ function majorToMinor(amount: string, currency: string): string {
 }
 
 export async function runTopup(formData: FormData) {
+  await requireSession();
   const amount = String(formData.get('amount') ?? '').trim();
   const currency = String(formData.get('currency') ?? 'NGN').toUpperCase();
   const externalReference = String(formData.get('external_reference') ?? '').trim() || undefined;

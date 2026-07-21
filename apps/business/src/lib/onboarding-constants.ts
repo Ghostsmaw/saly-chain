@@ -13,6 +13,9 @@ export const ONBOARDING_REJECTED = 'rejected';
 /** Cookie value: user skipped onboarding — profile-only dashboard access. */
 export const ONBOARDING_SKIPPED = 'skipped';
 
+/** Cookie value: onboarding done or not required — no path limits. */
+export const ONBOARDING_COMPLETE = 'complete';
+
 export const ONBOARDING_FLAG_KEY = 'new_onboarding_flow';
 
 /** Routes allowed while verification is pending or skipped (profile-only mode). */

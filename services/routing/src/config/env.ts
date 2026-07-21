@@ -17,6 +17,8 @@ export const routingEnvSchema = z.object({
   ROUTING_L3_ENABLED: z.coerce.boolean().default(true),
   /** Base network for on-chain DEX pair eligibility. */
   BASE_NETWORK: z.enum(['base-mainnet', 'base-sepolia']).default('base-sepolia'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
 });
 
 export type RoutingEnv = z.infer<typeof routingEnvSchema>;

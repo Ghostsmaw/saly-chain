@@ -10,6 +10,8 @@ export const agentsEnvSchema = z.object({
   EXECUTION_BASE_URL: z.string().url().default('http://localhost:4003'),
   DEFAULT_PER_TX_CAP_MINOR: z.coerce.bigint().default(100_000_000n),
   DEFAULT_DAILY_CAP_MINOR: z.coerce.bigint().default(500_000_000n),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
 });
 
 export type AgentsEnv = z.infer<typeof agentsEnvSchema>;

@@ -16,6 +16,8 @@ export const stablecoinEnvSchema = z.object({
   L3_L3_RPC_URL: z.string().url().optional(),
   L3_SALYSD_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
   L3_RESERVE_ORACLE_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
 });
 
 export type StablecoinEnv = z.infer<typeof stablecoinEnvSchema>;

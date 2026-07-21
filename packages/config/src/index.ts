@@ -42,6 +42,12 @@ export function loadEnv<S extends ZodRawShape>(
 
 export { isIpAllowed } from './ip-match.js';
 export { assertProductionPosture, type ProdGuardRule } from './prod-guard.js';
+export {
+  INTERNAL_AUTH_HEADER,
+  constantTimeEquals,
+  internalAuthMiddleware,
+  type InternalAuthOptions,
+} from './internal-auth.js';
 
 function formatZodError(error: ZodError): string {
   const lines = error.errors.map((issue) => {

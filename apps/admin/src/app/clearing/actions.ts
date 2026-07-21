@@ -2,18 +2,22 @@
 
 import { revalidatePath } from 'next/cache';
 import { ulid } from 'ulid';
+import { requireSession } from '@/lib/auth';
 
 const EXECUTION_URL = process.env.EXECUTION_BASE_URL ?? 'http://localhost:4003';
 const ADMIN_TOKEN = process.env.EXECUTION_ADMIN_TOKEN ?? '';
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
+  const internalToken = process.env.INTERNAL_SERVICE_TOKEN;
   return {
     Authorization: `Bearer ${ADMIN_TOKEN}`,
     'Content-Type': 'application/json',
+    ...(internalToken ? { 'x-internal-token': internalToken } : {}),
   };
 }
 
 export async function seedClearingPool(formData: FormData) {
+  await requireSession();
   if (!ADMIN_TOKEN) {
     return { ok: false as const, message: 'EXECUTION_ADMIN_TOKEN not configured.' };
   }

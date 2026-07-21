@@ -1,6 +1,18 @@
+import { assertProductionPosture } from '@salychain/config';
 import { initTelemetry, startWorkerObservabilityServer } from '@salychain/observability';
 import { env } from './config.js';
 import { startServer, shutdown } from './server.js';
+
+// PSP signatures are the primary webhook auth; the IP allow-list is the
+// defense-in-depth layer. An empty list silently allows every source IP, so
+// production refuses to boot without it (fail closed, not fail open).
+assertProductionPosture(env.NODE_ENV, [
+  {
+    when: env.WEBHOOK_ALLOWED_IPS.length === 0,
+    message:
+      'WEBHOOK_ALLOWED_IPS must list the PSP source IPs in production — an empty allow-list accepts webhooks from anywhere',
+  },
+]);
 
 let shuttingDown = false;
 let serverReady = false;

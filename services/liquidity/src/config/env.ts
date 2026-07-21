@@ -26,6 +26,8 @@ export const liquidityEnvSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
 });
 
 export type LiquidityEnv = z.infer<typeof liquidityEnvSchema>;

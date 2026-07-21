@@ -2,15 +2,15 @@
 
 import { revalidatePath } from 'next/cache';
 import { proposeContractStatus } from '@/lib/api';
-import { getSession } from '@/lib/auth';
+import { requireSession } from '@/lib/auth';
 
 export async function proposeContractStatusAction(
   contractId: string,
   action: 'pause' | 'resume',
 ): Promise<{ ok: true; message: string; status: string } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
-    const actor = session?.email?.split('@')[0] ?? 'admin';
+    const actor = session.email.split('@')[0] ?? session.userId;
     const res = await proposeContractStatus(contractId, action, actor);
     revalidatePath('/contracts');
     return { ok: true, message: res.message, status: res.status };

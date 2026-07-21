@@ -125,6 +125,16 @@ Replace **every** `change-me` / `dev-*` / `rotate-me` value. Critical ones:
 | `APIKEY_HASH_PEPPER` | apikeys | Peppers API‑key hashes at rest |
 | `WEBHOOKS_FALLBACK_SECRET` | webhooks | Outbound HMAC signing fallback |
 | `LIQUIDITY_QUOTE_SIGNING_SECRET` | liquidity | Signs FX quotes (TTL) |
+| `INTERNAL_SERVICE_TOKEN` | all internal services + server-side apps | Service‑to‑service auth (`x-internal-token`) — startup fails in prod without it |
+| `COMPLIANCE_SANCTIONS_PROVIDER` | compliance | Must **not** be `embedded` in production (use vendor or `composite`) |
+| `LIQUIDITY_RATE_PROVIDER` | liquidity | Must **not** be `stub` in production; stub fallbacks must be `false` |
+| `FIAT_PSP_PROVIDER` | execution | Must **not** be `stub` in production; composite needs live PSP keys |
+| `EXPLORER_READ_TOKEN` | explorer, analytics-api, execution | Scoped read credential for the public explorer — **never** reuse `INTERNAL_SERVICE_TOKEN` |
+| `JWT_ACCESS_TTL_SEC` / `JWT_REFRESH_TTL_SEC` | identity | Short access JWT + rotatable refresh (apps store both httpOnly cookies) |
+| `COMPLIANCE_PII_ENC_KEY` | compliance | AES‑256‑GCM key (base64, 32 bytes) for KYC/KYB metadata at rest |
+| `FLUTTERWAVE_REQUIRE_BODY_HMAC` | fiat-listener | Set `true` when edge stamps `x-saly-flw-body-hmac` |
+| `WEBHOOK_SECRET_ENC_KEY` | webhooks | AES‑256‑GCM key (base64, 32 bytes) sealing signing secrets at rest — startup fails in prod without it |
+| `WEBHOOK_ALLOWED_IPS` | fiat-listener | PSP source IP allow‑list — startup fails in prod when empty (fail‑open otherwise) |
 | `EXECUTION_INTERNAL_WEBHOOK_TOKEN` | execution, fiat-listener | Shared internal webhook auth |
 | `IDENTITY_INTERNAL_ADMIN_TOKEN` | identity, admin | Super‑admin invite flow |
 | `PORTAL_INTERNAL_SECRET` | gateway, portal | Portal ↔ gateway internal calls |
@@ -143,21 +153,26 @@ out to other services via these.
 
 ## 5. Custody — Signer + AWS KMS (do this carefully)
 
-1. **Provision the CMK** (Terraform module included):
+1. **Create the signer IRSA role** and annotate the dedicated Helm ServiceAccount
+   (`salychain-*-signer-sa` via `serviceAccount.signer.annotations`) — **never** attach
+   KMS decrypt to the shared platform SA.
+2. **Provision the CMK** (Terraform module included; least-privilege key policy +
+   encryption-context condition for `service` + `purpose`):
    ```bash
    cd infra/terraform/staging   # adapt for prod account/region
-   terraform init && terraform apply
+   terraform init
+   terraform apply -var="signer_role_arn=arn:aws:iam::ACCOUNT:role/salychain-signer-kms"
    ```
-2. Grant the signer's runtime role (ECS task role / IRSA) `kms:Encrypt`, `kms:Decrypt`,
-   `kms:GenerateDataKey` on that CMK only.
-3. Configure signer:
+3. Confirm the signer workload uses the dedicated SA and can only Encrypt/Decrypt
+   with encryption context `{ service=salychain-signer, purpose=wallet-private-key }`.
+4. Configure signer:
    ```
    KMS_PROVIDER=aws
    KMS_AWS_REGION=<region>
    KMS_AWS_KEY_ID=alias/salychain-signer   # or full ARN
    DATABASE_URL=postgresql://…/salychain_signer
    ```
-4. **If migrating existing dev keys** to KMS, rewrap them (never re‑expose plaintext):
+5. **If migrating existing dev keys** to KMS, rewrap them (never re‑expose plaintext):
    ```bash
    KMS_PROVIDER=aws KMS_AWS_REGION=… KMS_AWS_KEY_ID=… \
    KMS_LOCAL_MASTER_KEY=<legacy-dev-key> \
@@ -361,6 +376,17 @@ delivers with a valid `X-Saly-Signature`.
 
 ## 14. Pre‑launch verification (smoke + canary)
 
+Staging first (Wave C harness):
+
+```bash
+./scripts/smoke/wait-healthy.sh
+./scripts/smoke/health.sh
+./scripts/smoke/partner-flow.sh   # org→key→webhook→intent→SETTLED
+# or: pnpm smoke:partner
+```
+
+Vendor posture for staging: [staging-vendor-posture.md](staging-vendor-posture.md).
+
 Run the runbooks against **prod with tiny amounts** before opening traffic:
 
 | Flow | Runbook |
@@ -380,21 +406,41 @@ ledger (double‑entry balanced).
 
 ---
 
-## 15. Go‑live checklist
+## 15. Go‑live checklist (signed)
 
+Print or attach this section to the go-live ticket. **Two signatories** required (Eng lead + Ops/Custody).
+
+### 15.1 Engineering
 - [ ] `pnpm build` / `typecheck` / `lint` / `test` green on the released commit
 - [ ] All 18 databases migrated (`pnpm db:migrate`)
-- [ ] No dev placeholder secrets remain; all rotated via secret manager
-- [ ] Signer on **AWS KMS**; local master key removed; sign test passed
+- [ ] Distinct `INTERNAL_SERVICE_TOKEN` vs `EXPLORER_READ_TOKEN`
+- [ ] Staging partner-flow smoke green (`./scripts/smoke/partner-flow.sh`)
+- [ ] CI Actions pinned by SHA; audit + Trivy HIGH/CRITICAL clean
+
+### 15.2 Custody & vendors
+- [ ] [Custody key ceremony](custody-key-ceremony.md) completed; signer on **AWS KMS**
+- [ ] Compliance/liquidity/fiat using real providers (no stub / embedded) — staging posture already enforced
 - [ ] Contracts deployed + verified; addresses wired + registered
-- [ ] Base/XRPL/Fiat (+L3 if used) configured to mainnet, stubs disabled
-- [ ] Compliance/liquidity using real providers (no stub fallback)
+- [ ] Base/XRPL/Fiat (+L3 if used) configured to mainnet rails
+
+### 15.3 Ops resilience
+- [ ] [DR restore drill](disaster-recovery.md) passed in staging (RPO/RTO recorded)
+- [ ] [IR tabletop](incident-response-tabletop.md) completed; gaps ticketed
 - [ ] Postgres/Redis/NATS/S3 HA + backups verified
-- [ ] Gateway behind TLS/WAF; admin app behind SSO/VPN; core services internal‑only
-- [ ] Observability + alerting live (incl. ledger‑imbalance + listener‑lag alerts)
+- [ ] Gateway behind TLS/WAF; admin behind SSO/VPN; core services internal‑only
+- [ ] Observability + alerting live (ledger imbalance + listener lag + signer errors)
+- [ ] On-call rotation published; break-glass documented
+
+### 15.4 Canary
 - [ ] First super‑admin, treasury accounts, KYC/KYB rules configured
 - [ ] Canary transaction on every enabled rail succeeded and reconciled
-- [ ] Incident runbook + on‑call rotation in place; key‑rotation procedure documented
+
+### 15.5 Sign-off
+| Role | Name | Date (UTC) | Signature |
+|------|------|------------|-----------|
+| Engineering lead | | | |
+| Ops / Custody | | | |
+| Released commit SHA | | | |
 
 ---
 

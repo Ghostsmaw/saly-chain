@@ -172,8 +172,13 @@ export class TransactionsService {
     });
 
     try {
-      // Compliance + risk land in S2 — until then everyone passes through.
-      await this.transition(tx.id, 'SCREENED');
+      const screened = await this.screenDirectMoneyMovement(tx.id, {
+        intentId: dto.intent_id ?? tx.id,
+        actorRef: dto.from_account_id,
+        counterpartyRef: dto.to_account_id,
+        amountMinor: dto.amount_minor,
+      });
+      if (!screened) return this.getById(tx.id);
 
       // No routing needed for internal transfers; the rail is the ledger.
       await this.transition(tx.id, 'ROUTED');
@@ -271,7 +276,14 @@ export class TransactionsService {
     });
 
     try {
-      await this.transition(tx.id, 'SCREENED');
+      const screened = await this.screenDirectMoneyMovement(tx.id, {
+        intentId: dto.intent_id ?? tx.id,
+        actorRef: dto.source_wallet_id,
+        counterpartyRef: dto.destination_address,
+        amountMinor: dto.amount_minor,
+        chainAddress: { chain: 'BASE', address: dto.destination_address },
+      });
+      if (!screened) return this.getById(tx.id);
       await this.transition(tx.id, 'ROUTED', undefined, { selectedRail: 'BASE' });
 
       await this.reserveChainPayout({
@@ -349,7 +361,14 @@ export class TransactionsService {
     });
 
     try {
-      await this.transition(tx.id, 'SCREENED');
+      const screened = await this.screenDirectMoneyMovement(tx.id, {
+        intentId: dto.intent_id ?? tx.id,
+        actorRef: dto.source_wallet_id,
+        counterpartyRef: dto.destination_address,
+        amountMinor: dto.amount_minor,
+        chainAddress: { chain: 'SALY_L3', address: dto.destination_address },
+      });
+      if (!screened) return this.getById(tx.id);
       await this.transition(tx.id, 'ROUTED', undefined, { selectedRail: 'L3' });
 
       await this.reserveChainPayout({
@@ -431,7 +450,14 @@ export class TransactionsService {
     });
 
     try {
-      await this.transition(tx.id, 'SCREENED');
+      const screened = await this.screenDirectMoneyMovement(tx.id, {
+        intentId: dto.intent_id ?? tx.id,
+        actorRef: dto.source_wallet_id,
+        counterpartyRef: dto.destination_address,
+        amountMinor: dto.amount_minor,
+        chainAddress: { chain: 'XRPL', address: dto.destination_address },
+      });
+      if (!screened) return this.getById(tx.id);
       await this.transition(tx.id, 'ROUTED', undefined, { selectedRail: 'XRPL' });
 
       await this.reserveChainPayout({
@@ -986,6 +1012,30 @@ export class TransactionsService {
           return;
         }
 
+        // REVIEW is a hard hold — funds must not move until an approver resumes.
+        if (screen.decision === 'REVIEW' || assess.decision === 'REVIEW') {
+          await this.transition(
+            txId,
+            'AWAITING_APPROVAL',
+            `held for review (compliance=${screen.decision}, risk=${assess.decision})`,
+            {
+              complianceRunId: screen.run_id,
+              complianceCaseId: screen.case_id,
+              riskAssessmentId: assess.assessment_id,
+              riskScore: assess.score,
+              detail: {
+                compliance: { decision: screen.decision, max_score: screen.max_score },
+                risk: {
+                  decision: assess.decision,
+                  score: assess.score,
+                  components: assess.components,
+                },
+              },
+            },
+          );
+          return;
+        }
+
         await this.transition(
           txId,
           'SCREENED',
@@ -1180,8 +1230,16 @@ export class TransactionsService {
       switch (route.selected_rail) {
         case 'INTERNAL':
           if (intent.kind === 'SWAP') {
-            await this.executeSwapLeg(txId, intent, dest, fxQuote!);
+            // Consume (validate signature + TTL, mark CONSUMED) BEFORE moving
+            // any money. Consuming first makes the quote's one-time-use
+            // guarantee the actual gate on settlement: if the quote was
+            // already used, expired, or forged, we throw here and never
+            // touch the ledger. Settling first (the old order) let two
+            // concurrent transactions both pass the pre-settlement checks on
+            // the same quote and both post ledger entries before either
+            // discovered the quote was already spent.
             await this.liquidity.consume(fxQuote!.quote_id, fxQuote!.signature);
+            await this.executeSwapLeg(txId, intent, dest, fxQuote!);
           } else {
             await this.executeInternalLeg(txId, intent, dest);
           }
@@ -1924,7 +1982,8 @@ export class TransactionsService {
 
   async getPayrollBatchLines(parentId: string): Promise<ReturnType<typeof toResponse>[]> {
     const parent = await this.prisma.executionTransaction.findUnique({ where: { id: parentId } });
-    if (!parent || parent.kind !== 'PAYROLL_BATCH') {
+    const orgId = getTenantOrgId();
+    if (!parent || parent.kind !== 'PAYROLL_BATCH' || (orgId && parent.orgId !== orgId)) {
       throw NotFoundError('execution.payroll.not_found', `Payroll batch ${parentId} not found`);
     }
 
@@ -2336,6 +2395,34 @@ export class TransactionsService {
 
   // ───────────────────────────── Settlement (called by ConfirmationsService) ─────────────────────────────
 
+  /**
+   * Wallet's broadcast worker publishes `salychain.tx.awaiting_confirmation` with
+   * `transaction_id` = broadcast job id + the on-chain `tx_hash`. Attach that hash
+   * so subsequent chain observations can settle via `markSettledByTxHash`.
+   */
+  async attachTxHashFromBroadcast(input: {
+    broadcastJobId: string;
+    txHash: string;
+  }): Promise<void> {
+    const normalized = input.txHash.replace(/^0x/i, '').toUpperCase();
+    const variants = Array.from(
+      new Set([input.txHash, normalized, `0x${normalized}`, normalized.toLowerCase()]),
+    );
+    const updated = await this.prisma.executionTransaction.updateMany({
+      where: {
+        broadcastJobId: input.broadcastJobId,
+        state: { in: ['EXECUTING', 'AWAITING_CONFIRMATION'] },
+        txHash: null,
+      },
+      data: { txHash: variants[0] },
+    });
+    if (updated.count > 0) {
+      this.logger.log(
+        `attached tx_hash=${variants[0]} to broadcast_job=${input.broadcastJobId}`,
+      );
+    }
+  }
+
   async markSettledByTxHash(input: {
     txHash: string;
     blockNumber?: number;
@@ -2343,8 +2430,19 @@ export class TransactionsService {
     chain?: FinalityChain;
     confirmationsDepth?: number;
   }): Promise<void> {
+    const normalized = input.txHash.replace(/^0x/i, '');
+    const hashVariants = Array.from(
+      new Set([
+        input.txHash,
+        normalized,
+        normalized.toUpperCase(),
+        normalized.toLowerCase(),
+        `0x${normalized}`,
+        `0x${normalized.toUpperCase()}`,
+      ]),
+    );
     const tx = await this.prisma.executionTransaction.findFirst({
-      where: { txHash: input.txHash, state: 'AWAITING_CONFIRMATION' },
+      where: { txHash: { in: hashVariants }, state: 'AWAITING_CONFIRMATION' },
       include: { events: { orderBy: { occurredAt: 'desc' } } },
     });
     if (!tx) return;
@@ -2807,6 +2905,80 @@ export class TransactionsService {
       counterpartyRef: dest.counterpartyRef,
       amountUsdMinor: intent.source.amount.amount_minor,
     });
+  }
+
+  /**
+   * Compliance + risk gate for direct money APIs (internal transfer / chain
+   * payouts) that do not go through `runIntentPipeline`. Returns `false` when
+   * the transaction was rejected or held for review (caller should return the
+   * current row and not move funds).
+   */
+  private async screenDirectMoneyMovement(
+    txId: string,
+    input: {
+      intentId: string;
+      actorRef: string;
+      counterpartyRef: string;
+      amountMinor: string;
+      chainAddress?: { chain: string; address: string };
+    },
+  ): Promise<boolean> {
+    const screen = await this.compliance.screen({
+      intentId: input.intentId,
+      subjectRef: input.actorRef,
+      subjectKind: 'BUSINESS',
+      displayName: undefined,
+      countryCode: undefined,
+      chainAddress: input.chainAddress,
+    });
+    if (screen.decision === 'BLOCK') {
+      await this.transition(txId, 'REJECTED', `compliance BLOCK (case ${screen.case_id ?? 'none'})`, {
+        complianceRunId: screen.run_id,
+        complianceCaseId: screen.case_id,
+        error: `Compliance screening blocked the transaction (max score ${screen.max_score})`,
+      });
+      return false;
+    }
+
+    const assess = await this.risk.assess({
+      intentId: input.intentId,
+      actorExternalRef: input.actorRef,
+      counterpartyRef: input.counterpartyRef,
+      amountUsdMinor: input.amountMinor,
+    });
+    if (assess.decision === 'BLOCK') {
+      await this.transition(txId, 'REJECTED', `risk BLOCK (score ${assess.score})`, {
+        riskAssessmentId: assess.assessment_id,
+        riskScore: assess.score,
+        complianceRunId: screen.run_id,
+        complianceCaseId: screen.case_id,
+        error: `Risk engine blocked the transaction (score ${assess.score})`,
+      });
+      return false;
+    }
+
+    if (screen.decision === 'REVIEW' || assess.decision === 'REVIEW') {
+      await this.transition(
+        txId,
+        'AWAITING_APPROVAL',
+        `held for review (compliance=${screen.decision}, risk=${assess.decision})`,
+        {
+          complianceRunId: screen.run_id,
+          complianceCaseId: screen.case_id,
+          riskAssessmentId: assess.assessment_id,
+          riskScore: assess.score,
+        },
+      );
+      return false;
+    }
+
+    await this.transition(txId, 'SCREENED', `compliance=${screen.decision}, risk=${assess.decision}`, {
+      complianceRunId: screen.run_id,
+      complianceCaseId: screen.case_id,
+      riskAssessmentId: assess.assessment_id,
+      riskScore: assess.score,
+    });
+    return true;
   }
 
   private async reserveChainPayout(input: {

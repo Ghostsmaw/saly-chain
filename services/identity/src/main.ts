@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { loadEnv } from '@salychain/config';
+import { assertProductionPosture, internalAuthMiddleware, loadEnv } from '@salychain/config';
 import { initTelemetry, bootstrapHttpObservability } from '@salychain/observability';
 import { createLogger } from '@salychain/logger';
 import { AppModule } from './app.module.js';
@@ -11,6 +11,13 @@ import { identityEnvSchema } from './config/env.js';
 async function bootstrap() {
   const env = loadEnv(identityEnvSchema);
   const logger = createLogger({ service: 'identity', env: env.NODE_ENV, level: env.LOG_LEVEL });
+  assertProductionPosture(env.NODE_ENV, [
+    {
+      when: !env.INTERNAL_SERVICE_TOKEN,
+      message: 'INTERNAL_SERVICE_TOKEN must be set — identity admin APIs must not be open',
+    },
+  ]);
+
 
   initTelemetry({
     serviceName: 'identity',
@@ -19,6 +26,21 @@ async function bootstrap() {
   });
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.use(
+    internalAuthMiddleware({
+      serviceName: 'identity',
+      token: env.INTERNAL_SERVICE_TOKEN,
+      nodeEnv: env.NODE_ENV,
+      warn: (msg) => logger.warn(msg),
+      extraPublicPaths: [
+        '/v1/auth/login',
+        '/v1/auth/register',
+        '/v1/auth/refresh',
+        '/v1/auth/logout',
+        '/v1/.well-known/jwks.json',
+      ],
+    }),
+  );
   bootstrapHttpObservability(app, { serviceName: 'identity' });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }));
   app.setGlobalPrefix('v1');

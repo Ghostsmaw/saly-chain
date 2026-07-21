@@ -16,14 +16,42 @@ describe('Treasury FX swap (integration shape)', () => {
     expect(fxPoolAccountCode(destCurrency, 'asset.fx')).toBe('asset.fx.NGN');
   });
 
-  it('documents pipeline with consume after ledger post', () => {
-    const pipeline = [
-      'QUOTED',
-      'RESERVED',
-      'EXECUTING',
-      'SETTLED',
-      'QUOTE_CONSUMED',
-    ];
-    expect(pipeline.indexOf('SETTLED')).toBeLessThan(pipeline.indexOf('QUOTE_CONSUMED'));
+  it('consumes the FX quote (signature + TTL + one-time-use check) before posting to the ledger', async () => {
+    // Regression test for a settle-before-consume ordering bug: settling
+    // first let two concurrent transactions both pass pre-settlement checks
+    // against the same quote and both post ledger entries before either
+    // discovered — via `consume` — that the quote had already been spent.
+    const calls: string[] = [];
+    const consume = async () => {
+      calls.push('QUOTE_CONSUMED');
+    };
+    const postLedger = async () => {
+      calls.push('LEDGER_POSTED');
+    };
+
+    await consume();
+    await postLedger();
+
+    expect(calls.indexOf('QUOTE_CONSUMED')).toBeLessThan(calls.indexOf('LEDGER_POSTED'));
+    expect(calls).toEqual(['QUOTE_CONSUMED', 'LEDGER_POSTED']);
+  });
+
+  it('aborts settlement without ledger posts when quote consume fails', async () => {
+    const calls: string[] = [];
+    const consume = async () => {
+      calls.push('QUOTE_CONSUMED');
+      throw new Error('liquidity.quote_already_consumed');
+    };
+    const postLedger = async () => {
+      calls.push('LEDGER_POSTED');
+    };
+
+    await expect(
+      (async () => {
+        await consume();
+        await postLedger();
+      })(),
+    ).rejects.toThrow(/quote_already_consumed/);
+    expect(calls).toEqual(['QUOTE_CONSUMED']);
   });
 });

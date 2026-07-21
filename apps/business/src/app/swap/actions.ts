@@ -10,8 +10,10 @@ import {
   submitOnchainSwapIntent,
   submitSwapIntent,
 } from '@/lib/api';
+import { requireSession } from '@/lib/auth';
 
 export async function checkDexPool(formData: FormData) {
+  await requireSession();
   const fromCurrency = String(formData.get('from_currency') ?? '');
   const toCurrency = String(formData.get('to_currency') ?? '');
   if (!fromCurrency || !toCurrency) {
@@ -37,6 +39,7 @@ export async function checkDexPool(formData: FormData) {
 }
 
 export async function previewDexQuote(formData: FormData) {
+  await requireSession();
   const amountRaw = String(formData.get('amount') ?? '').trim();
   const fromCurrency = String(formData.get('from_currency') ?? '');
   const toCurrency = String(formData.get('to_currency') ?? '');
@@ -87,6 +90,7 @@ export async function previewDexQuote(formData: FormData) {
 }
 
 export async function previewFxQuote(formData: FormData) {
+  await requireSession();
   const amountRaw = String(formData.get('amount') ?? '').trim();
   const fromCurrency = String(formData.get('from_currency') ?? '');
   const toCurrency = String(formData.get('to_currency') ?? '');
@@ -125,6 +129,7 @@ export async function previewFxQuote(formData: FormData) {
 }
 
 export async function submitSwap(formData: FormData) {
+  await requireSession();
   const mode = String(formData.get('mode') ?? 'ledger');
   const amountRaw = String(formData.get('amount') ?? '').trim();
   const fromCurrency = String(formData.get('from_currency') ?? '');

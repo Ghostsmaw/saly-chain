@@ -156,7 +156,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:reserve`,
-      transactionId: input.txId,
       memo: `Chain payout reserve (${input.rail} ${input.currency})`,
       metadata: { tx_id: input.txId, kind: input.kind, rail: input.rail, phase: 'reserve' },
       postings: [
@@ -192,7 +191,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:reserve-fiat`,
-      transactionId: input.txId,
       memo: `Fiat payout reserve (${input.currency})`,
       metadata: { tx_id: input.txId, kind: 'FIAT_PAYOUT', phase: 'reserve' },
       postings: [
@@ -236,7 +234,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${tx.id}:settle`,
-      transactionId: tx.id,
       memo: `Chain payout settle (${rail} ${currency})`,
       metadata: { tx_id: tx.id, kind: tx.kind, rail, phase: 'settle', reserve_entry_id: tx.ledgerEntryId },
       postings: [
@@ -280,7 +277,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${tx.id}:settle-fiat`,
-      transactionId: tx.id,
       memo: `Fiat payout settle (${currency})`,
       metadata: { tx_id: tx.id, kind: 'FIAT_PAYOUT', phase: 'settle' },
       postings: [
@@ -333,7 +329,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:settle-dex`,
-      transactionId: input.txId,
       memo: `DEX swap settle ${tokenIn}→${tokenOut}`,
       metadata: {
         tx_id: input.txId,
@@ -400,7 +395,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:bridge-base`,
-      transactionId: input.txId,
       memo: `Bridge Base leg (${direction})`,
       metadata: { tx_id: input.txId, phase: 'base_leg', direction },
       postings: [
@@ -441,7 +435,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:bridge-l3`,
-      transactionId: input.txId,
       memo: `Bridge L3 leg (${direction})`,
       metadata: { tx_id: input.txId, phase: 'l3_leg', direction },
       postings: [
@@ -490,7 +483,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:bridge-base-credit`,
-      transactionId: input.txId,
       memo: `Bridge Base credit (${direction})`,
       metadata: {
         tx_id: input.txId,
@@ -534,7 +526,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:bridge-l3-credit`,
-      transactionId: input.txId,
       memo: `Bridge L3 credit (${direction})`,
       metadata: { tx_id: input.txId, phase: 'l3_credit', direction },
       postings: [
@@ -569,7 +560,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:salysd-mint-settle`,
-      transactionId: input.txId,
       memo: 'SalySD mint settle',
       metadata: { tx_id: input.txId, kind: 'SALYSD_MINT', phase: 'settle' },
       postings: [
@@ -604,7 +594,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:salysd-redeem-reserve`,
-      transactionId: input.txId,
       memo: 'SalySD redeem reserve',
       metadata: { tx_id: input.txId, kind: 'SALYSD_REDEEM', phase: 'reserve' },
       postings: [
@@ -640,7 +629,6 @@ export class LedgerReservationService {
 
     const journal = await this.ledger.postJournalEntry({
       idempotencyKey: `exec:${input.txId}:salysd-redeem-settle`,
-      transactionId: input.txId,
       memo: 'SalySD redeem settle',
       metadata: { tx_id: input.txId, kind: 'SALYSD_REDEEM', phase: 'settle' },
       postings: [

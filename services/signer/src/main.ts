@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { loadEnv, assertProductionPosture } from '@salychain/config';
+import { loadEnv, assertProductionPosture, internalAuthMiddleware } from '@salychain/config';
 import { initTelemetry, bootstrapHttpObservability } from '@salychain/observability';
 import { createLogger } from '@salychain/logger';
 import { AppModule } from './app.module.js';
@@ -12,7 +12,8 @@ async function bootstrap() {
   const env = loadEnv(signerEnvSchema);
   const logger = createLogger({ service: 'signer', env: env.NODE_ENV, level: env.LOG_LEVEL });
 
-  // Fail-closed: never custody real keys in production with the dev KMS.
+  // Fail-closed: never custody real keys in production with the dev KMS,
+  // and never run the custody signer reachable without internal auth.
   assertProductionPosture(env.NODE_ENV, [
     {
       when: env.KMS_PROVIDER === 'local',
@@ -21,6 +22,11 @@ async function bootstrap() {
     {
       when: env.KMS_PROVIDER === 'aws' && !env.KMS_AWS_KEY_ID,
       message: 'KMS_AWS_KEY_ID is required when KMS_PROVIDER=aws.',
+    },
+    {
+      when: !env.INTERNAL_SERVICE_TOKEN,
+      message:
+        'INTERNAL_SERVICE_TOKEN must be set — the signer custodies private keys and cannot run open',
     },
   ]);
 
@@ -31,6 +37,14 @@ async function bootstrap() {
   });
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.use(
+    internalAuthMiddleware({
+      serviceName: 'signer',
+      token: env.INTERNAL_SERVICE_TOKEN,
+      nodeEnv: env.NODE_ENV,
+      warn: (msg) => logger.warn(msg),
+    }),
+  );
   bootstrapHttpObservability(app, { serviceName: 'signer' });
   app.useGlobalPipes(
     new ValidationPipe({

@@ -3,12 +3,6 @@ import { cookies } from 'next/headers';
 import { getSession } from '@/lib/auth';
 import { getDeveloperOnboarding, isOnboardingEnabledForProfile, onboardingProgressPercent } from '@/lib/onboarding';
 import { applyOnboardingCookie } from '@/lib/apply-onboarding-cookie';
-import {
-  ONBOARDING_COOKIE,
-  ONBOARDING_REJECTED,
-  ONBOARDING_REVIEW,
-  ONBOARDING_SKIPPED,
-} from '@/lib/onboarding-constants';
 
 export type OnboardingGateMode = 'skipped' | 'review' | 'rejected';
 
@@ -25,14 +19,13 @@ export async function GET() {
 
   const status = await getDeveloperOnboarding(session.userId);
   const jar = await cookies();
-  applyOnboardingCookie(jar, status);
-  const cookieVal = jar.get(ONBOARDING_COOKIE)?.value;
+  const gateState = await applyOnboardingCookie(jar, session.userId, status);
   const progress = onboardingProgressPercent(status);
 
   let mode: OnboardingGateMode | null = null;
-  if (cookieVal === ONBOARDING_SKIPPED) mode = 'skipped';
-  else if (cookieVal === ONBOARDING_REVIEW || status.status === 'pending_review') mode = 'review';
-  else if (cookieVal === ONBOARDING_REJECTED || status.status === 'rejected') mode = 'rejected';
+  if (gateState === 'skipped') mode = 'skipped';
+  else if (gateState === 'review' || status.status === 'pending_review') mode = 'review';
+  else if (gateState === 'rejected' || status.status === 'rejected') mode = 'rejected';
 
   const limited = Boolean(mode && !status.complete);
 

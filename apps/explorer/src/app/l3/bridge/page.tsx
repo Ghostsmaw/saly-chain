@@ -19,10 +19,13 @@ type BridgeTx = {
 
 async function fetchBridgeData(): Promise<{ status: Record<string, string | boolean>; txs: BridgeTx[] }> {
   const contracts = resolveBridgeContracts(process.cwd());
+  // Scoped explorer credential only — never INTERNAL_SERVICE_TOKEN.
+  const readToken = process.env.EXPLORER_READ_TOKEN;
+  const headers = readToken ? { 'x-internal-token': readToken } : undefined;
   try {
     const [statusRes, txRes] = await Promise.all([
-      fetch(`${EXECUTION_URL}/v1/bridge/status`, { next: { revalidate: 0 } }),
-      fetch(`${EXECUTION_URL}/v1/bridge/transactions`, { next: { revalidate: 0 } }),
+      fetch(`${EXECUTION_URL}/v1/bridge/status`, { next: { revalidate: 0 }, headers }),
+      fetch(`${EXECUTION_URL}/v1/bridge/transactions`, { next: { revalidate: 0 }, headers }),
     ]);
     const status = statusRes.ok ? ((await statusRes.json()) as Record<string, string | boolean>) : {};
     const txs = txRes.ok ? ((await txRes.json()) as { data: BridgeTx[] }).data : [];

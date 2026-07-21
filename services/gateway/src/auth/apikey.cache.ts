@@ -15,9 +15,14 @@ import { APIKEYS_CLIENT } from './apikeys.client.module.js';
  *   - apikeys.verify runs scrypt (~10ms). That's fine at low QPS but we expect
  *     thousands of req/s on hot keys.
  *   - On a hot key, we cache the verify result keyed by sha256(secret).
- *   - TTL is intentionally short (default 15s). Revocations propagate within
- *     that window; partners who want immediate kill can also call
- *     `POST /v1/api-keys/:id/revoke` and the next cached entry will fail.
+ *   - TTL is intentionally short (default 15s) as the backstop.
+ *
+ * Revocation:
+ *   - Alongside each entry we write a pointer `gw:apikey:byid:<key_id>` →
+ *     cache key. The apikeys service deletes both on revoke/rotate (shared
+ *     Redis), so a revoked key dies immediately instead of living out the
+ *     TTL window. The TTL remains the safety net if Redis or the pointer
+ *     write was lost.
  *
  * Why not cache misses:
  *   - A miss means "this secret is invalid". If an attacker is brute-forcing
@@ -66,7 +71,13 @@ export class ApiKeyCache {
     }
 
     try {
-      await this.redis.set(cacheKey, JSON.stringify(result), 'EX', this.env.APIKEY_CACHE_TTL_SEC);
+      const ttl = this.env.APIKEY_CACHE_TTL_SEC;
+      await this.redis
+        .multi()
+        .set(cacheKey, JSON.stringify(result), 'EX', ttl)
+        // Pointer that lets the apikeys service kill this entry on revoke.
+        .set(`gw:apikey:byid:${result.api_key_id}`, cacheKey, 'EX', ttl)
+        .exec();
     } catch {
       // best-effort cache
     }

@@ -67,9 +67,12 @@ contract SalyStreamPay is ReentrancyGuard {
     }
 
     function withdraw(bytes32 streamId) external nonReentrant returns (uint256 amount) {
-        Stream storage s = _requireActive(streamId);
+        Stream storage s = streams[streamId];
+        if (s.deposit == 0) revert UnknownStream(streamId);
         if (s.recipient != msg.sender) revert NotRecipient(streamId, msg.sender);
 
+        // Pull-payment: recipient withdraws accrued funds whether the stream is
+        // still active or was cancelled (owed balance remains claimable).
         amount = _accrued(s) - s.withdrawn;
         if (amount == 0) revert NothingToWithdraw(streamId);
 
@@ -84,17 +87,17 @@ contract SalyStreamPay is ReentrancyGuard {
         Stream storage s = _requireActive(streamId);
         if (s.payer != msg.sender) revert NotPayer(streamId, msg.sender);
 
+        // Freeze accrual at cancel time; recipient pulls via withdraw (no push).
+        if (uint64(block.timestamp) < s.stopTime) {
+            s.stopTime = uint64(block.timestamp);
+        }
+
         uint256 accrued = _accrued(s);
         uint256 owed = accrued > s.withdrawn ? accrued - s.withdrawn : 0;
         uint256 refund = s.deposit > (s.withdrawn + owed) ? s.deposit - (s.withdrawn + owed) : 0;
 
         s.active = false;
 
-        if (owed > 0) {
-            s.withdrawn += owed;
-            (bool okRecipient,) = s.recipient.call{ value: owed }("");
-            require(okRecipient, "recipient transfer failed");
-        }
         if (refund > 0) {
             (bool okPayer,) = msg.sender.call{ value: refund }("");
             require(okPayer, "refund failed");
@@ -105,13 +108,12 @@ contract SalyStreamPay is ReentrancyGuard {
 
     function balanceOf(bytes32 streamId) external view returns (uint256) {
         Stream storage s = streams[streamId];
-        if (!s.active && s.deposit == 0) revert UnknownStream(streamId);
+        if (s.deposit == 0) revert UnknownStream(streamId);
         uint256 accrued = _accrued(s);
         return accrued > s.withdrawn ? accrued - s.withdrawn : 0;
     }
 
     function _accrued(Stream storage s) private view returns (uint256) {
-        if (!s.active) return s.withdrawn;
         uint64 end = uint64(block.timestamp) < s.stopTime ? uint64(block.timestamp) : s.stopTime;
         if (end <= s.startTime) return 0;
         return uint256(end - s.startTime) * s.ratePerSecond;

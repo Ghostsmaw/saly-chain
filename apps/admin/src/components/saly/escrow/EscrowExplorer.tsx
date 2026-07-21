@@ -144,7 +144,8 @@ export function EscrowTokenHint() {
     <SalyCard className="border-amber-500/20 bg-amber-500/[0.04]">
       <p className="text-sm text-amber-200/90">
         Set <code className="text-amber-100/90">EXECUTION_ADMIN_TOKEN</code> to enable release/refund API calls.
-        Optionally set <code className="text-amber-100/90">WALLET_INTERNAL_ADMIN_TOKEN</code> on wallet.
+        <code className="text-amber-100/90">WALLET_INTERNAL_ADMIN_TOKEN</code> must be set on the wallet
+        service — escrow resolution is disabled (fail-closed) without it.
       </p>
     </SalyCard>
   );

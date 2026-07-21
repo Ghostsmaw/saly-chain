@@ -114,7 +114,11 @@ function merchant(): MerchantClient {
 const tenantOpts = { orgId: BUSINESS_ORG_ID };
 
 async function apikeysFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${SERVICE_URLS.apikeys}/v1${path}`, { cache: 'no-store' });
+  const internalToken = process.env.INTERNAL_SERVICE_TOKEN;
+  const res = await fetch(`${SERVICE_URLS.apikeys}/v1${path}`, {
+    cache: 'no-store',
+    headers: internalToken ? { 'x-internal-token': internalToken } : undefined,
+  });
   if (!res.ok) throw new Error(`apikeys ${res.status}`);
   return res.json() as Promise<T>;
 }

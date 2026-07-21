@@ -36,6 +36,8 @@ export const intelligenceEnvSchema = z.object({
   // provider can be enabled later; until then LLM-only questions fall back to
   // the rule planner (and return a clear "unsupported" plan if it can't map).
   INTELLIGENCE_LLM_ENABLED: bool('false'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
 });
 
 export type IntelligenceEnv = z.infer<typeof intelligenceEnvSchema>;

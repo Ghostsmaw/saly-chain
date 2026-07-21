@@ -3,8 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { voteSpendApproval } from '@/lib/api';
+import { requireSession } from '@/lib/auth';
 
 export async function approveSpendAction(formData: FormData): Promise<void> {
+  await requireSession();
   const agentId = String(formData.get('agent_id') ?? '');
   const requestId = String(formData.get('request_id') ?? '');
 

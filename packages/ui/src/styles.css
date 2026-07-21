@@ -20,7 +20,13 @@
         rgba(43, 201, 240, 0.1) 0%,
         rgba(43, 201, 240, 0) 60%
       ),
+      radial-gradient(
+        1000px 700px at 50% 115%,
+        rgba(106, 53, 240, 0.08) 0%,
+        rgba(106, 53, 240, 0) 55%
+      ),
       #0b0820;
+    background-attachment: fixed;
     color: #f4f2ff;
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -50,13 +56,49 @@
 }
 
 @layer components {
+  /*
+   * Glass surface system. Layered translucency + saturated backdrop blur +
+   * an inset top highlight ("catchlight") is what makes glass read as glass
+   * instead of a flat grey box.
+   */
+  .saly-glass {
+    background:
+      linear-gradient(160deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.015) 45%, rgba(255, 255, 255, 0) 100%),
+      rgba(23, 17, 56, 0.55);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    backdrop-filter: blur(20px) saturate(1.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 8px 32px -12px rgba(5, 2, 20, 0.7);
+  }
+
   .saly-card {
-    @apply rounded-xl border border-surface-border bg-surface-card/80 backdrop-blur-sm;
-    @apply shadow-card;
+    @apply saly-glass rounded-xl;
   }
   .saly-card-hover {
-    @apply transition-colors hover:bg-surface-cardHover hover:border-surface-borderStrong;
+    @apply transition-all duration-300 ease-out;
   }
+  .saly-card-hover:hover {
+    border-color: rgba(129, 89, 255, 0.28);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.09),
+      0 16px 48px -12px rgba(5, 2, 20, 0.85),
+      0 0 32px -12px rgba(106, 53, 240, 0.35);
+    transform: translateY(-2px);
+  }
+
+  /* Staggered entrance for dashboard content. Apply to a parent; children animate in order. */
+  .saly-stagger > * {
+    animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .saly-stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .saly-stagger > *:nth-child(2) { animation-delay: 50ms; }
+  .saly-stagger > *:nth-child(3) { animation-delay: 100ms; }
+  .saly-stagger > *:nth-child(4) { animation-delay: 150ms; }
+  .saly-stagger > *:nth-child(5) { animation-delay: 200ms; }
+  .saly-stagger > *:nth-child(6) { animation-delay: 250ms; }
+  .saly-stagger > *:nth-child(n + 7) { animation-delay: 300ms; }
   .saly-chip {
     @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
   }
@@ -74,5 +116,33 @@
   }
   .saly-chip-brand {
     @apply saly-chip bg-brand-500/15 text-brand-300;
+  }
+
+  /* Ambient, slowly drifting gradient orbs behind dashboard content. */
+  .saly-orb {
+    @apply pointer-events-none absolute rounded-full;
+    filter: blur(90px);
+    will-change: transform;
+  }
+}
+
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -37,6 +37,17 @@ describe('PolicyEngine', () => {
     ).toSatisfy(throws('signer.policy.destination_not_allowed'));
   });
 
+  it('denies when the allowlist is empty (fail closed)', () => {
+    expect(() =>
+      engine.evaluate({
+        policy: { ...unlimited, destinationAllowlist: [] },
+        context: baseContext,
+        rolling24hSpentMinor: 0n,
+        approvers: 0,
+      }),
+    ).toSatisfy(throws('signer.policy.destination_allowlist_empty'));
+  });
+
   it('enforces per-tx caps', () => {
     expect(() =>
       engine.evaluate({

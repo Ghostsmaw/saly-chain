@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, ValidationError } from '@salychain/errors
 import { Subscription, SubscriptionStatus } from '../generated/prisma/index.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { WEBHOOKS_ENV, type WebhooksEnv } from '../config/env.js';
+import { SECRET_VAULT, SecretVault } from '../crypto/secret-vault.js';
 import { generateSigningSecret } from '../delivery/signing.js';
 
 export interface CreateSubscriptionInput {
@@ -62,6 +63,7 @@ export class SubscriptionsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(WEBHOOKS_ENV) private readonly env: WebhooksEnv,
+    @Inject(SECRET_VAULT) private readonly vault: SecretVault,
   ) {}
 
   async create(input: CreateSubscriptionInput): Promise<IssuedSubscription> {
@@ -85,7 +87,8 @@ export class SubscriptionsService {
         url: input.url,
         description: input.description ?? null,
         subjects: input.subjects,
-        signingSecret: secretHex,
+        // Sealed at rest — the plaintext secret leaves this method exactly once.
+        signingSecret: this.vault.seal(secretHex),
         signingKeyId: keyId,
       },
     });
@@ -121,7 +124,7 @@ export class SubscriptionsService {
     const { secretHex, keyId } = generateSigningSecret(this.env.SIGNING_SECRET_BYTES);
     const updated = await this.prisma.subscription.update({
       where: { id },
-      data: { signingSecret: secretHex, signingKeyId: keyId },
+      data: { signingSecret: this.vault.seal(secretHex), signingKeyId: keyId },
     });
     this.logger.warn(`subscription ${id} secret rotated, new kid=${keyId}`);
     return { subscription: toPublic(updated), signing_secret: secretHex };

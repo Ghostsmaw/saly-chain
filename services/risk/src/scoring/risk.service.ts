@@ -68,12 +68,12 @@ export class RiskService {
   ) {}
 
   /**
-   * Best-effort counterparty entity lookup. Fail-open: any error/timeout returns
-   * `undefined` and scoring proceeds on the rule engine alone.
+   * Counterparty entity lookup. When intelligence is configured, failures
+   * fail-closed: return `unavailable` so assess() forces at least REVIEW.
    */
   private async fetchEntitySignal(
     counterpartyRef?: string,
-  ): Promise<{ riskScore?: number; sanctioned?: boolean } | undefined> {
+  ): Promise<{ riskScore?: number; sanctioned?: boolean; unavailable?: boolean } | undefined> {
     if (!this.intelligence) return undefined;
     const parsed = parseCounterpartyAddress(counterpartyRef);
     if (!parsed) return undefined;
@@ -81,8 +81,8 @@ export class RiskService {
       const features = await this.intelligence.addressFeatures(parsed.chain, parsed.address);
       return { riskScore: features.entity_risk_score, sanctioned: features.sanctioned };
     } catch (err) {
-      this.logger.warn(`intelligence lookup failed (fail-open): ${(err as Error).message}`);
-      return undefined;
+      this.logger.warn(`intelligence lookup failed (fail-closed → REVIEW): ${(err as Error).message}`);
+      return { unavailable: true };
     }
   }
 
@@ -100,6 +100,10 @@ export class RiskService {
       : null;
 
     const entity = await this.fetchEntitySignal(input.counterpartyRef);
+    const entityForScore =
+      entity && !entity.unavailable
+        ? { riskScore: entity.riskScore, sanctioned: entity.sanctioned }
+        : undefined;
 
     const scoring: ScoringResult = this.engine.score({
       amountUsdMinor: input.amountUsdMinor,
@@ -111,10 +115,15 @@ export class RiskService {
         stddevTicketUsdMinor: profile.stddevTicketUsdMinor,
       },
       counterparty: { txCount: edge?.txCount ?? 0 },
-      ...(entity ? { entity } : {}),
+      ...(entityForScore ? { entity: entityForScore } : {}),
     });
 
-    const decision = this.decide(scoring.finalScore);
+    let decision = this.decide(scoring.finalScore);
+    // Intelligence outage must not silently allow high-value counterparty flows.
+    if (entity?.unavailable && decision === 'ALLOW') {
+      decision = 'REVIEW';
+      scoring.reasons.push('intelligence_unavailable');
+    }
 
     const created = await this.prisma.riskAssessment.create({
       data: {

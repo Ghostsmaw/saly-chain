@@ -11,6 +11,9 @@ export const scmEnvSchema = commonEnvSchema.extend({
   CONTRACT_REGISTRY_BASE_URL: z.string().url().default('http://localhost:4013'),
   NATS_URL: z.string().default('nats://localhost:4222'),
   ID_PREFIX: z.string().default('scm_'),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
+
 });
 
 export type ScmEnv = z.infer<typeof scmEnvSchema>;

@@ -552,7 +552,7 @@ export async function fetchAccountDetail(id: string): Promise<FetchResult<Accoun
       compliance().getTier(id),
       wallet().listWalletsByActor({ actorRef: id }),
       compliance().listCases({ limit: 200 }),
-      identity().listDelegations({ userId: id }),
+      identity().listDelegations({ userId: id }, process.env.IDENTITY_INTERNAL_ADMIN_TOKEN),
     ]);
 
     const onboarding =

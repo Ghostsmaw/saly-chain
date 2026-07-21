@@ -34,6 +34,13 @@ services:
   - { name: identity, port: 4012 }
   - { name: contract-registry, port: 4013 }
   - { name: admin, port: 4014 }
+  - { name: finance, port: 4023 }
+  - { name: gov, port: 4024 }
+  - { name: agri, port: 4025 }
+  - { name: scm, port: 4026 }
+  - { name: aviation, port: 4027 }
+  - { name: health, port: 4028 }
+  - { name: edu, port: 4029 }
   - { name: signer, port: 4099, replicas: 3 }
 
 ingress:

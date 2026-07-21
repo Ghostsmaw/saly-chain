@@ -244,6 +244,7 @@ export class EscrowService {
       actor: actor ?? 'admin',
     });
 
+    const walletToken = env.WALLET_INTERNAL_ADMIN_TOKEN ?? env.EXECUTION_ADMIN_TOKEN;
     const result = await this.wallet.resolveEscrow(
       {
         walletId: env.ESCROW_RESOLVER_WALLET_ID,
@@ -251,9 +252,7 @@ export class EscrowService {
         action: action.toLowerCase() as 'release' | 'refund',
         escrowContract: deal.escrowContract,
       },
-      env.EXECUTION_ADMIN_TOKEN
-        ? { headers: { Authorization: `Bearer ${env.EXECUTION_ADMIN_TOKEN}` } }
-        : undefined,
+      walletToken ? { headers: { Authorization: `Bearer ${walletToken}` } } : undefined,
     );
 
     const updated = await this.prisma.escrowDeal.update({

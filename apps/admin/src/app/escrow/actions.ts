@@ -1,18 +1,22 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireSession } from '@/lib/auth';
 
 const EXECUTION_URL = process.env.EXECUTION_BASE_URL ?? 'http://localhost:4003';
 const ADMIN_TOKEN = process.env.EXECUTION_ADMIN_TOKEN ?? '';
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
+  const internalToken = process.env.INTERNAL_SERVICE_TOKEN;
   return {
     Authorization: `Bearer ${ADMIN_TOKEN}`,
     'Content-Type': 'application/json',
+    ...(internalToken ? { 'x-internal-token': internalToken } : {}),
   };
 }
 
 export async function fetchEscrowDeals(status?: string) {
+  await requireSession();
   if (!ADMIN_TOKEN) return { ok: false as const, message: 'EXECUTION_ADMIN_TOKEN not configured.', data: [] };
   const qs = status ? `?status=${encodeURIComponent(status)}` : '';
   const res = await fetch(`${EXECUTION_URL}/v1/escrow/deals${qs}`, {
@@ -27,6 +31,7 @@ export async function fetchEscrowDeals(status?: string) {
 }
 
 export async function releaseEscrowDeal(dealId: string) {
+  await requireSession();
   if (!ADMIN_TOKEN) return { ok: false, message: 'EXECUTION_ADMIN_TOKEN not configured.' };
   const res = await fetch(`${EXECUTION_URL}/v1/escrow/deals/${encodeURIComponent(dealId)}/release`, {
     method: 'POST',
@@ -40,6 +45,7 @@ export async function releaseEscrowDeal(dealId: string) {
 }
 
 export async function refundEscrowDeal(dealId: string) {
+  await requireSession();
   if (!ADMIN_TOKEN) return { ok: false, message: 'EXECUTION_ADMIN_TOKEN not configured.' };
   const res = await fetch(`${EXECUTION_URL}/v1/escrow/deals/${encodeURIComponent(dealId)}/refund`, {
     method: 'POST',

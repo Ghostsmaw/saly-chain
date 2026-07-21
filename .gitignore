@@ -13,7 +13,10 @@ out/
 # env & secrets
 .env
 .env.local
+.env.staging
 .env.*.local
+.smoke-logs/
+.dr-artifacts/
 .l3-monitor/
 infra/l3/devnet/deployments.base-sepolia.json
 infra/l3/devnet/artifacts/

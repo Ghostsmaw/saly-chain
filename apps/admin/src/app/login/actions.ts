@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { login, persistSession } from '@/lib/auth';
 import { describeAuthError } from '@/lib/auth-error';
+import { safeInternalPath } from '@/lib/session';
 
 export interface LoginState {
   error?: string;
@@ -24,5 +25,5 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     return { error: describeAuthError(err, 'admin') };
   }
 
-  redirect(next.startsWith('/') ? next : '/');
+  redirect(safeInternalPath(next));
 }

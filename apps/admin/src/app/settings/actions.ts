@@ -13,10 +13,10 @@ import {
   updateVerificationRequirement,
 } from '@/lib/api';
 import type { PlatformSettingsDto, RbacRoleDto, VerificationRequirementDto } from '@salychain/sdk-internal';
-import { getSession } from '@/lib/auth';
+import { requireSession, type SessionUser } from '@/lib/auth';
 
-function actorRef(session: Awaited<ReturnType<typeof getSession>>): string | undefined {
-  return session?.email?.split('@')[0];
+function actorRef(session: SessionUser): string {
+  return session.email.split('@')[0] ?? session.userId;
 }
 
 export async function saveGeneralSettingsAction(
@@ -28,8 +28,8 @@ export async function saveGeneralSettingsAction(
     notifications: Partial<PlatformSettingsDto['notifications']>;
   }>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
     await updatePlatformSettings({ ...input, actor_ref: actorRef(session) });
     revalidatePath('/settings');
     return { ok: true };
@@ -42,8 +42,8 @@ export async function toggleFeatureFlagAction(
   flagId: string,
   enabled: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
     await updateFeatureFlag(flagId, enabled, actorRef(session));
     revalidatePath('/settings');
     return { ok: true };
@@ -57,8 +57,8 @@ export async function inviteAdminAction(input: {
   email: string;
   role_name: string;
 }): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
     const result = await inviteAdminMember({ ...input, actor_ref: actorRef(session) });
     revalidatePath('/settings');
     return { ok: true, message: result.invite.message };
@@ -70,9 +70,9 @@ export async function inviteAdminAction(input: {
 export async function revokeAdminAction(
   memberId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
-    await revokeAdminMember(memberId, actorRef(session), session?.email);
+    await revokeAdminMember(memberId, actorRef(session), session.email);
     revalidatePath('/settings');
     return { ok: true };
   } catch (err) {
@@ -85,8 +85,8 @@ export async function createRoleAction(input: {
   permissions: string[];
   tone?: RbacRoleDto['tone'];
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
     await createRbacRole({ ...input, actor_ref: actorRef(session) });
     revalidatePath('/settings');
     return { ok: true };
@@ -99,8 +99,8 @@ export async function updateRoleAction(
   roleId: string,
   input: { permissions: string[]; tone?: RbacRoleDto['tone'] },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
     await updateRbacRole(roleId, { ...input, actor_ref: actorRef(session) });
     revalidatePath('/settings');
     return { ok: true };
@@ -124,8 +124,8 @@ export async function createVerificationRequirementAction(input: {
   target_developer: boolean;
   is_active?: boolean;
 }): Promise<{ ok: true; requirement: VerificationRequirementDto } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
     const requirement = await createVerificationRequirement({ ...input, actor_ref: actorRef(session) });
     revalidatePath('/settings');
     return { ok: true, requirement };
@@ -149,8 +149,8 @@ export async function updateVerificationRequirementAction(
     sort_order?: number;
   },
 ): Promise<{ ok: true; requirement: VerificationRequirementDto } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
     const requirement = await updateVerificationRequirement(id, { ...input, actor_ref: actorRef(session) });
     revalidatePath('/settings');
     return { ok: true, requirement };
@@ -162,8 +162,8 @@ export async function updateVerificationRequirementAction(
 export async function deleteVerificationRequirementAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await requireSession();
   try {
-    const session = await getSession();
     await deleteVerificationRequirement(id, { actor_ref: actorRef(session) });
     revalidatePath('/settings');
     return { ok: true };

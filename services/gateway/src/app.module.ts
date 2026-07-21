@@ -88,11 +88,19 @@ export class AppModule implements NestModule {
     consumer
       .apply(AuthMiddleware, RateLimitMiddleware, TenantContextMiddleware)
       .exclude(
+        // Nest global-prefix + path-to-regexp matching varies by version —
+        // keep both bare and prefixed forms so probes stay unauthenticated.
+        { path: 'health', method: RequestMethod.GET },
+        { path: '/health', method: RequestMethod.GET },
         { path: 'v1/health', method: RequestMethod.GET },
+        { path: '/v1/health', method: RequestMethod.GET },
         { path: 'docs', method: RequestMethod.GET },
         { path: 'docs/(.*)', method: RequestMethod.GET },
+        { path: 'docs/*path', method: RequestMethod.GET },
         { path: 'v1/internal/logs', method: RequestMethod.GET },
+        { path: '/v1/internal/logs', method: RequestMethod.GET },
         { path: 'v1/internal/logs/summary', method: RequestMethod.GET },
+        { path: '/v1/internal/logs/summary', method: RequestMethod.GET },
       )
       .forRoutes('*');
   }

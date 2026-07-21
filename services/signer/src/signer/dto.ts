@@ -2,11 +2,13 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsEnum,
+  IsInt,
   IsObject,
   IsOptional,
   IsString,
   Length,
   Matches,
+  Min,
   ValidateNested,
   IsArray,
 } from 'class-validator';
@@ -76,6 +78,9 @@ export class SignPolicyDto {
   approval_threshold_minor?: string | null;
 
   @ApiProperty()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
   required_approvers!: number;
 }
 

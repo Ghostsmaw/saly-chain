@@ -69,8 +69,13 @@ export interface NamedQueryRequest {
 /** Typed client for the Saly Realtime APIs (read-only ClickHouse data). */
 export class DataClient {
   private readonly http: HttpClient;
-  constructor(opts: { baseUrl: string; logger?: Logger }) {
-    this.http = new HttpClient({ baseUrl: opts.baseUrl, serviceName: 'analytics-api', logger: opts.logger });
+  constructor(opts: { baseUrl: string; logger?: Logger; internalToken?: string }) {
+    this.http = new HttpClient({
+      baseUrl: opts.baseUrl,
+      serviceName: 'analytics-api',
+      ...(opts.logger ? { logger: opts.logger } : {}),
+      ...(opts.internalToken ? { internalToken: opts.internalToken } : {}),
+    });
   }
 
   transfers(query: TransfersQuery = {}, options?: RequestOptions): Promise<TransfersResponse> {

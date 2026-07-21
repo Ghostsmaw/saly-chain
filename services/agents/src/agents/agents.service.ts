@@ -88,7 +88,10 @@ export class AgentsService {
           create: {
             perTxCapMinor: this.env.DEFAULT_PER_TX_CAP_MINOR,
             dailyCapMinor: this.env.DEFAULT_DAILY_CAP_MINOR,
-            destinationAllowlist: ['*'],
+            // Deny-all until the owner explicitly configures destinations.
+            // `"*"` used to be the default and let a brand-new agent pay any
+            // address up to its caps — unsafe for custodial agent wallets.
+            destinationAllowlist: [],
             approvalThresholdMinor: 0n,
             requiredApprovers: 0,
             currency: 'USD',
@@ -111,7 +114,7 @@ export class AgentsService {
       await this.wallet.updatePolicy(w.id, {
         perTxCapMinor: agent.policy.perTxCapMinor.toString(),
         dailyCapMinor: agent.policy.dailyCapMinor.toString(),
-        destinationAllowlist: ['*'],
+        destinationAllowlist: agent.policy.destinationAllowlist as string[],
         approvalThresholdMinor: '0',
         requiredApprovers: 0,
       });
@@ -234,11 +237,18 @@ export class AgentsService {
     const dest = input.destinationAddress.toLowerCase();
     const allowlist = policy.destinationAllowlist as string[];
 
-    if (
-      allowlist.length > 0 &&
-      !allowlist.includes('*') &&
-      !allowlist.some((a) => a.toLowerCase() === dest)
-    ) {
+    // Empty allowlist = deny-all (matches signer policy engine). `"*"` is the
+    // only way to permit arbitrary destinations.
+    if (allowlist.length === 0) {
+      await this.publishSpendDenied(agentId, input.intentId, 'agents.policy.destination_allowlist_empty');
+      return {
+        allowed: false,
+        reason_code: 'agents.policy.destination_allowlist_empty',
+        reason_message: 'Agent destination allowlist is empty — configure destinations before spending',
+        policy_version: policy.version,
+      };
+    }
+    if (!allowlist.includes('*') && !allowlist.some((a) => a.toLowerCase() === dest)) {
       await this.publishSpendDenied(agentId, input.intentId, 'agents.policy.destination_not_allowed');
       return {
         allowed: false,

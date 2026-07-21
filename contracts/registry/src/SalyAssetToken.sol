@@ -20,6 +20,7 @@ contract SalyAssetToken is ERC1155, AccessControl {
 
     error ZeroAmount();
     error ZeroRecipient();
+    error BurnNotApproved();
 
     constructor(address admin, string memory baseUri) ERC1155(baseUri) {
         if (admin == address(0)) revert ZeroRecipient();
@@ -58,8 +59,19 @@ contract SalyAssetToken is ERC1155, AccessControl {
         _mintBatch(to, ids, amounts, data);
     }
 
+    /**
+     * @notice Burns `amount` of `id` from `from`.
+     * @dev    MINTER_ROLE is necessary but not sufficient: `from` must also have
+     *         consented, either by calling this themselves or by granting the
+     *         caller `setApprovalForAll` — the same operator model ERC-1155
+     *         already uses for transfers. Without this check, any MINTER_ROLE
+     *         holder (or a compromised minter key/service) could destroy any
+     *         holder's asset tokens with no consent, e.g. for a "redemption"
+     *         request the holder never made.
+     */
     function burn(address from, uint256 id, uint256 amount) external onlyRole(MINTER_ROLE) {
         if (amount == 0) revert ZeroAmount();
+        if (from != _msgSender() && !isApprovedForAll(from, _msgSender())) revert BurnNotApproved();
         _burn(from, id, amount);
     }
 

@@ -129,9 +129,28 @@ exports.Prisma.UserScalarFieldEnum = {
   role: 'role',
   displayName: 'displayName',
   passwordHash: 'passwordHash',
+  failedLoginCount: 'failedLoginCount',
+  lockedUntil: 'lockedUntil',
   metadata: 'metadata',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
+};
+
+exports.Prisma.RefreshTokenScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  tokenHash: 'tokenHash',
+  familyId: 'familyId',
+  expiresAt: 'expiresAt',
+  revokedAt: 'revokedAt',
+  replacedById: 'replacedById',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.AccessTokenDenialScalarFieldEnum = {
+  jti: 'jti',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.UserAliasScalarFieldEnum = {
@@ -198,6 +217,8 @@ exports.UserAliasKind = exports.$Enums.UserAliasKind = {
 
 exports.Prisma.ModelName = {
   User: 'User',
+  RefreshToken: 'RefreshToken',
+  AccessTokenDenial: 'AccessTokenDenial',
   UserAlias: 'UserAlias',
   DelegationGrant: 'DelegationGrant'
 };

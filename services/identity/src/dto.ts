@@ -62,6 +62,26 @@ export class VerifyTokenDto {
   token!: string;
 }
 
+export class RefreshTokenDto {
+  @ApiProperty({ description: 'Opaque refresh token from login/register' })
+  @IsString()
+  @Length(16, 256)
+  refresh_token!: string;
+}
+
+export class LogoutDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(16, 256)
+  refresh_token?: string;
+
+  @ApiPropertyOptional({ description: 'Current access JWT — denied by jti until expiry' })
+  @IsOptional()
+  @IsString()
+  access_token?: string;
+}
+
 export class CreateDelegationDto {
   @ApiProperty()
   @IsString()

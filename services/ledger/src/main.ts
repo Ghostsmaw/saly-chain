@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
-import { loadEnv } from '@salychain/config';
+import { assertProductionPosture, internalAuthMiddleware, loadEnv } from '@salychain/config';
 import { initTelemetry, bootstrapHttpObservability } from '@salychain/observability';
 import { createLogger } from '@salychain/logger';
 import { ledgerEnvSchema } from './config/env.js';
@@ -11,6 +11,12 @@ import { ledgerEnvSchema } from './config/env.js';
 async function bootstrap() {
   const env = loadEnv(ledgerEnvSchema);
   const logger = createLogger({ service: 'ledger', env: env.NODE_ENV, level: env.LOG_LEVEL });
+  assertProductionPosture(env.NODE_ENV, [
+    {
+      when: !env.INTERNAL_SERVICE_TOKEN,
+      message: 'INTERNAL_SERVICE_TOKEN must be set — the ledger moves money and cannot run open',
+    },
+  ]);
 
   initTelemetry({
     serviceName: 'ledger',
@@ -19,6 +25,14 @@ async function bootstrap() {
   });
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.use(
+    internalAuthMiddleware({
+      serviceName: 'ledger',
+      token: env.INTERNAL_SERVICE_TOKEN,
+      nodeEnv: env.NODE_ENV,
+      warn: (msg) => logger.warn(msg),
+    }),
+  );
   bootstrapHttpObservability(app, { serviceName: 'ledger' });
   app.useGlobalPipes(
     new ValidationPipe({

@@ -23,8 +23,10 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }));
   app.setGlobalPrefix('v1');
 
-  // Express trust-proxy so X-Forwarded-For works behind ALB / Cloudflare.
-  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  // Express trust-proxy so req.ip resolves the real client behind ALB /
+  // Cloudflare. Middleware must use req.ip — never parse X-Forwarded-For
+  // directly (the leftmost entry is attacker-controlled).
+  app.getHttpAdapter().getInstance().set('trust proxy', env.TRUST_PROXY_HOPS);
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('SalyChain API')

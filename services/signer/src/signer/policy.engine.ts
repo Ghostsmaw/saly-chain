@@ -48,9 +48,18 @@ export class PolicyEngine {
   evaluate(input: PolicyEvaluationInput): void {
     const { policy, context, rolling24hSpentMinor, approvers } = input;
 
-    // 1) Destination allowlist.
+    // 1) Destination allowlist — fail closed.
+    // An empty list used to skip this check (allow-any). That meant a freshly
+    // provisioned wallet with `destinationAllowlist: []` could send to any
+    // address up to its caps. Empty now means deny-all; unrestricted keys must
+    // opt in explicitly with `"*"`.
+    if (policy.destinationAllowlist.length === 0) {
+      throw AuthorizationError(
+        'signer.policy.destination_allowlist_empty',
+        'Destination allowlist is empty — no destinations are permitted until explicitly configured',
+      );
+    }
     if (
-      policy.destinationAllowlist.length > 0 &&
       !policy.destinationAllowlist.includes('*') &&
       !policy.destinationAllowlist.includes(context.destinationAddress.toLowerCase())
     ) {

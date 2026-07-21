@@ -6,6 +6,10 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # Configure via: terraform init -backend-config=backend.hcl
+  # See backend.hcl.example. Local state is acceptable only for disposable lab use.
+  backend "s3" {}
 }
 
 provider "aws" {
@@ -17,9 +21,15 @@ variable "aws_region" {
   default = "eu-west-1"
 }
 
+variable "signer_role_arn" {
+  description = "IRSA role ARN for the signer ServiceAccount (salychain-*-signer-sa)"
+  type        = string
+}
+
 module "signer_kms" {
-  source      = "../modules/kms"
-  environment = "staging"
+  source          = "../modules/kms"
+  environment     = "staging"
+  signer_role_arn = var.signer_role_arn
 }
 
 output "signer_kms_key_id" {

@@ -1,10 +1,25 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { parseFlutterwaveTransferWebhook, verifyFlutterwaveWebhookSignature } from './flutterwave.js';
+import {
+  parseFlutterwaveTransferWebhook,
+  verifyFlutterwaveWebhookBodyHmac,
+  verifyFlutterwaveWebhookSignature,
+} from './flutterwave.js';
 
 describe('verifyFlutterwaveWebhookSignature', () => {
   it('compares verif-hash to the dashboard secret hash', () => {
     expect(verifyFlutterwaveWebhookSignature('my-secret-hash', 'my-secret-hash')).toBe(true);
     expect(verifyFlutterwaveWebhookSignature('wrong', 'my-secret-hash')).toBe(false);
+  });
+});
+
+describe('verifyFlutterwaveWebhookBodyHmac', () => {
+  it('binds the raw body under the secret', () => {
+    const secret = 'my-secret-hash';
+    const body = '{"event":"transfer.completed"}';
+    const hmac = createHmac('sha256', secret).update(body).digest('hex');
+    expect(verifyFlutterwaveWebhookBodyHmac(body, secret, hmac)).toBe(true);
+    expect(verifyFlutterwaveWebhookBodyHmac(body, secret, 'deadbeef')).toBe(false);
   });
 });
 

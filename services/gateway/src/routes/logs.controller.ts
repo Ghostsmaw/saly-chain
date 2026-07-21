@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { constantTimeEquals } from '@salychain/config';
 import { AuthorizationError } from '@salychain/errors';
 import { RequireScopes, ScopeGuard } from '../auth/scope.guard.js';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
@@ -116,7 +117,8 @@ export class InternalLogsController {
 
   private assertPortalSecret(secret: string | undefined): void {
     const expected = this.env.PORTAL_INTERNAL_SECRET;
-    if (!expected || secret !== expected) {
+    // Fail closed when unconfigured; compare in constant time (no timing oracle).
+    if (!expected || !secret || !constantTimeEquals(secret, expected)) {
       throw new UnauthorizedException('Invalid portal secret');
     }
   }

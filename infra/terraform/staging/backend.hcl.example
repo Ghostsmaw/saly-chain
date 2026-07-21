@@ -1,0 +1,11 @@
+# Copy to backend.hcl (do not commit secrets) and init with:
+#   terraform init -backend-config=backend.hcl
+#
+# Remote state is required before any production apply so CMK / IRSA changes
+# are not lost to a local terraform.tfstate on a laptop.
+
+bucket         = "salychain-terraform-state-ACCOUNT"
+key            = "staging/signer-kms/terraform.tfstate"
+region         = "eu-west-1"
+dynamodb_table = "salychain-terraform-locks"
+encrypt        = true

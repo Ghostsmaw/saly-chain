@@ -1,24 +1,14 @@
-import {
-  Body,
-  Controller,
-  Headers,
-  HttpCode,
-  Post,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Body, Controller, Headers, HttpCode, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { loadEnv } from '@salychain/config';
 import { executionEnvSchema } from '../config/env.js';
+import { assertBearerToken } from '../common/assert-bearer.js';
 import { SeedClearingDto } from './dto.js';
 import { TransactionsService } from './transactions.service.js';
 
 function assertAdmin(authorization: string | undefined) {
   const env = loadEnv(executionEnvSchema);
-  const token = env.EXECUTION_ADMIN_TOKEN;
-  if (!token) throw new UnauthorizedException('clearing admin API is disabled');
-  if (authorization !== `Bearer ${token}`) {
-    throw new UnauthorizedException('invalid admin token');
-  }
+  assertBearerToken(authorization, env.EXECUTION_ADMIN_TOKEN, 'clearing admin API is disabled');
 }
 
 @ApiTags('clearing')

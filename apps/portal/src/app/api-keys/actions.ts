@@ -8,6 +8,7 @@ import {
   rotateApiKey,
 } from '@/lib/api';
 import { PORTAL_API_KEY_SCOPES } from '@/lib/constants';
+import { requireSession } from '@/lib/auth';
 
 export type PortalActionResult =
   | { ok: true; message?: string; secret?: string; secretLabel?: string }
@@ -33,6 +34,7 @@ function parseIpAllowList(raw: FormDataEntryValue | null): string[] {
 }
 
 export async function createApiKeyAction(formData: FormData): Promise<PortalActionResult> {
+  await requireSession();
   const environment = String(formData.get('environment') ?? 'TEST') as 'TEST' | 'LIVE';
   const scopes = parseScopes(formData.get('scopes'));
   const description = String(formData.get('description') ?? '').trim() || undefined;
@@ -68,6 +70,7 @@ export async function createApiKeyAction(formData: FormData): Promise<PortalActi
 }
 
 export async function rotateApiKeyAction(formData: FormData): Promise<PortalActionResult> {
+  await requireSession();
   const id = String(formData.get('key_id') ?? '');
   if (!id) return { ok: false, error: 'Missing key id.' };
 
@@ -86,6 +89,7 @@ export async function rotateApiKeyAction(formData: FormData): Promise<PortalActi
 }
 
 export async function revokeApiKeyAction(formData: FormData): Promise<PortalActionResult> {
+  await requireSession();
   const id = String(formData.get('key_id') ?? '');
   if (!id) return { ok: false, error: 'Missing key id.' };
 

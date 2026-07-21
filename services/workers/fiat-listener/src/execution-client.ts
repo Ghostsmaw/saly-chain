@@ -19,13 +19,18 @@ export class ExecutionClient {
     this.token = token;
   }
 
+  private headers(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.token}`,
+      ...(env.INTERNAL_SERVICE_TOKEN ? { 'x-internal-token': env.INTERNAL_SERVICE_TOKEN } : {}),
+    };
+  }
+
   async confirmSettlement(event: ParsedFiatWebhook): Promise<ExecutionConfirmResult> {
     const res = await fetch(`${this.baseUrl}/v1/internal/fiat/confirmations`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
+      headers: this.headers(),
       body: JSON.stringify({
         tx_id: event.txId,
         psp_id: event.pspId,
@@ -47,10 +52,7 @@ export class ExecutionClient {
   async confirmPayin(event: ParsedFiatPayin): Promise<ExecutionConfirmResult> {
     const res = await fetch(`${this.baseUrl}/v1/internal/fiat/payins`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
+      headers: this.headers(),
       body: JSON.stringify({
         reference: event.reference,
         psp_reference: event.pspReference,

@@ -16,7 +16,8 @@ export class RequestLogMiddleware implements NestMiddleware {
     const start = Date.now();
     res.on('finish', () => {
       const correlationId = (req.headers['x-correlation-id'] as string | undefined) ?? '';
-      const ip = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ?? req.ip;
+      // Trust-proxy-resolved client IP (see main.ts); raw XFF is spoofable.
+      const ip = req.ip;
       this.logger.log({
         ...(req.auth?.api_key_id ? { apiKeyId: req.auth.api_key_id } : {}),
         ...(req.auth?.org_id ? { orgId: req.auth.org_id } : {}),

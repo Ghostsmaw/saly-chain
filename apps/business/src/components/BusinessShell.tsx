@@ -100,12 +100,15 @@ export function BusinessShell({
         return <VerificationRejectedDashboard label={gate.label} />;
       }
       return (
-        <div className="mx-auto max-w-lg rounded-2xl border border-surface-border bg-surface-card/40 p-8 text-center">
+        <div className="saly-glass mx-auto max-w-lg rounded-2xl p-8 text-center">
           <h2 className="text-lg font-semibold text-text-primary">Profile-only access</h2>
           <p className="mt-2 text-sm text-text-secondary">
             Complete business verification to unlock treasury, payments, and team management.
           </p>
-          <Link href="/settings" className="mt-4 inline-block rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-400">
+          <Link
+            href="/settings"
+            className="mt-4 inline-block rounded-lg bg-brand-gradient px-4 py-2 text-sm font-medium text-white shadow-glow transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
+          >
             Go to profile
           </Link>
         </div>
@@ -113,7 +116,7 @@ export function BusinessShell({
     }
 
     return (
-      <div className="grid place-items-center rounded-2xl border border-dashed border-surface-border bg-surface-card/40 p-16 text-center">
+      <div className="saly-glass grid place-items-center rounded-2xl border-dashed p-16 text-center">
         <p className="max-w-md text-sm text-text-secondary">
           This area is locked until your verification is approved. You can update your profile in{' '}
           <Link href="/settings" className="text-brand-300 hover:text-brand-200">Settings</Link>.
@@ -123,7 +126,12 @@ export function BusinessShell({
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="relative flex min-h-screen bg-background">
+      {/* Ambient drifting gradient orbs — depth behind the glass surfaces. */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <div className="saly-orb left-[-8%] top-[-12%] h-[430px] w-[430px] animate-float-slow bg-brand-500/15" />
+        <div className="saly-orb right-[-6%] top-[35%] h-[360px] w-[360px] animate-float-slower bg-accent-500/10" />
+      </div>
       <Sidebar
         brand={<Logo subtitle="Business" />}
         items={navItems}
@@ -144,9 +152,9 @@ export function BusinessShell({
           );
         }}
       />
-      <main className="flex min-h-screen flex-1 flex-col">
+      <main className="relative z-10 flex min-h-screen flex-1 flex-col">
         <Topbar title={title} subtitle={subtitle} right={topRight ?? <OrgChip orgName={orgName} />} />
-        <div className="flex-1 p-8">
+        <div className="saly-stagger flex-1 p-8">
           {renderBanner()}
           {renderMain()}
         </div>
@@ -167,7 +175,7 @@ function matchActive(items: readonly SidebarItem[], pathname: string | null): st
 
 function SidebarFooter() {
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-surface-card/60 p-3">
+    <div className="saly-glass flex items-center gap-2 rounded-lg p-3">
       <StatusDot tone="operational" />
       <div className="leading-tight">
         <p className="text-xs font-medium text-text-primary">Treasury status</p>
@@ -217,7 +225,7 @@ function OrgChip({ orgName }: { orgName?: string }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-3 rounded-lg border border-surface-border bg-surface-card/60 px-3 py-1.5 transition hover:bg-surface-cardHover/60"
+        className="flex items-center gap-3 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 backdrop-blur-sm transition-all duration-200 hover:border-brand-500/30 hover:bg-white/[0.07]"
       >
         <div className="grid h-7 w-7 place-items-center rounded-full bg-brand-gradient text-xs font-semibold text-white">
           {initials}
@@ -230,11 +238,8 @@ function OrgChip({ orgName }: { orgName?: string }) {
       </button>
 
       {open && (
-        <div
-          className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-2xl border border-surface-border shadow-[0_20px_60px_-12px_rgba(0,0,0,0.8)]"
-          style={{ backgroundColor: '#15103A' }}
-        >
-          <div className="border-b border-surface-divider px-4 py-3">
+        <div className="saly-glass absolute right-0 top-12 z-50 w-56 animate-scale-in overflow-hidden rounded-2xl shadow-[0_20px_60px_-12px_rgba(0,0,0,0.8)]">
+          <div className="border-b border-white/[0.06] px-4 py-3">
             <p className="text-sm font-medium text-text-primary">{name}</p>
             <p className="truncate text-[11px] text-text-tertiary">{email}</p>
           </div>

@@ -3,6 +3,15 @@ import { ulid } from 'ulid';
 import { ConflictError, NotFoundError, ValidationError } from '@salychain/errors';
 import { PrismaService } from '../prisma/prisma.service.js';
 
+/** Scopes a delegation may grant — never broader than consumer defaults. */
+const ALLOWED_DELEGATION_SCOPES = new Set([
+  'intents:read',
+  'intents:write',
+  'agents:read',
+  'agents:write',
+  'transactions:read',
+]);
+
 @Injectable()
 export class DelegationsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -18,6 +27,19 @@ export class DelegationsService {
     }
     const user = await this.prisma.user.findUnique({ where: { id: input.userId } });
     if (!user) throw NotFoundError('identity.user.not_found', `User ${input.userId} not found`);
+    if (user.status !== 'ACTIVE') {
+      throw ValidationError('identity.user.inactive', `User ${input.userId} is ${user.status}`);
+    }
+
+    const scopes = input.scopes ?? ['intents:write', 'agents:read'];
+    for (const scope of scopes) {
+      if (!ALLOWED_DELEGATION_SCOPES.has(scope)) {
+        throw ValidationError(
+          'identity.delegation.scope_forbidden',
+          `Scope "${scope}" cannot be granted via delegation`,
+        );
+      }
+    }
 
     const existing = await this.prisma.delegationGrant.findUnique({
       where: { userId_agentId: { userId: input.userId, agentId: input.agentId } },
@@ -33,7 +55,7 @@ export class DelegationsService {
       ? await this.prisma.delegationGrant.update({
           where: { id: existing.id },
           data: {
-            scopes: input.scopes ?? ['intents:write', 'agents:read'],
+            scopes,
             expiresAt: input.expiresAt ?? null,
             revokedAt: null,
           },
@@ -43,7 +65,7 @@ export class DelegationsService {
             id: `dlg_${ulid()}`,
             userId: input.userId,
             agentId: input.agentId,
-            scopes: input.scopes ?? ['intents:write', 'agents:read'],
+            scopes,
             expiresAt: input.expiresAt ?? null,
           },
         });

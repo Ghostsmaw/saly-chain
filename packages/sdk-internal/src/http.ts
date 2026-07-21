@@ -17,8 +17,12 @@ import {
  *  - automatic `x-correlation-id` propagation
  *  - automatic `x-idempotency-key` generation on mutating methods if the
  *    caller didn't provide one (avoids accidental at-least-once dupes)
+ *  - automatic `x-internal-token` attachment from INTERNAL_SERVICE_TOKEN so
+ *    every internal service call authenticates itself
  *  - error normalization: every non-2xx becomes a SalyChainError instance
  */
+
+const HEADER_INTERNAL_TOKEN = 'x-internal-token';
 
 export interface HttpClientOptions {
   baseUrl: string;
@@ -26,6 +30,11 @@ export interface HttpClientOptions {
   defaultTimeoutMs?: number;
   maxRetries?: number;
   logger?: Logger | undefined;
+  /**
+   * Explicit internal token. Prefer this over INTERNAL_SERVICE_TOKEN when the
+   * caller is a public surface that must use a scoped credential.
+   */
+  internalToken?: string;
 }
 
 export interface RequestOptions {
@@ -50,6 +59,7 @@ export class HttpClient {
   private readonly defaultTimeoutMs: number;
   private readonly maxRetries: number;
   private readonly logger: Logger | undefined;
+  private readonly internalToken: string | undefined;
 
   constructor(opts: HttpClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/$/, '');
@@ -57,6 +67,7 @@ export class HttpClient {
     this.defaultTimeoutMs = opts.defaultTimeoutMs ?? 5_000;
     this.maxRetries = opts.maxRetries ?? 3;
     this.logger = opts.logger;
+    this.internalToken = opts.internalToken;
   }
 
   get<TRes>(path: string, options: RequestOptions = {}): Promise<TRes> {
@@ -92,11 +103,13 @@ export class HttpClient {
     const orgId = options.orgId ?? tenant?.orgId;
     const environment = options.environment ?? tenant?.environment;
     const url = this.buildUrl(path, options.query);
+    const internalToken = this.internalToken ?? process.env.INTERNAL_SERVICE_TOKEN;
     const headers: Record<string, string> = {
       accept: 'application/json',
       [HEADER_CORRELATION_ID]: correlationId,
       ...(orgId ? { [HEADER_ORG_ID]: orgId } : {}),
       ...(environment ? { [HEADER_ENVIRONMENT]: environment } : {}),
+      ...(internalToken ? { [HEADER_INTERNAL_TOKEN]: internalToken } : {}),
       ...(options.headers ?? {}),
     };
     if (body !== undefined) headers['content-type'] = 'application/json';

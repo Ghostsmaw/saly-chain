@@ -57,6 +57,7 @@ contract SalyStaking is ReentrancyGuard, Ownable2Step {
     error Staking__RewardTooHigh();
     error Staking__PeriodActive();
     error Staking__CannotRecoverStakingToken();
+    error Staking__CannotRecoverRewardsToken();
 
     constructor(address initialOwner, address _stakingToken, address _rewardsToken) Ownable(initialOwner) {
         if (_stakingToken == address(0) || _rewardsToken == address(0)) revert Staking__ZeroAddress();
@@ -175,9 +176,11 @@ contract SalyStaking is ReentrancyGuard, Ownable2Step {
         emit RewardsDurationUpdated(_rewardsDuration);
     }
 
-    /// @notice Rescue tokens accidentally sent here. Never the staking token.
+    /// @notice Rescue tokens accidentally sent here. Never staking or rewards tokens —
+    ///         unpaid rewards and (when identical) staked principal must stay locked.
     function recoverERC20(address token, uint256 amount) external onlyOwner {
         if (token == address(stakingToken)) revert Staking__CannotRecoverStakingToken();
+        if (token == address(rewardsToken)) revert Staking__CannotRecoverRewardsToken();
         IERC20(token).safeTransfer(owner(), amount);
         emit Recovered(token, amount);
     }

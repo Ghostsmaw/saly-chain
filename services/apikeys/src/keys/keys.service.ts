@@ -4,6 +4,7 @@ import { AuthenticationError, AuthorizationError, ConflictError, NotFoundError, 
 import { isIpAllowed } from '@salychain/config';
 import { ApiKey, ApiKeyStatus, Environment } from '../generated/prisma/index.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { GatewayCacheInvalidator } from './gateway-cache.invalidator.js';
 import { extractPrefix, generateApiKey, verifyApiKey } from './key-secret.js';
 import { APIKEYS_ENV, type ApiKeysRuntimeEnv } from '../config/env.runtime.js';
 
@@ -57,6 +58,7 @@ export class KeysService {
   private readonly logger = new Logger(KeysService.name);
   constructor(
     private readonly prisma: PrismaService,
+    private readonly gatewayCache: GatewayCacheInvalidator,
     @Inject(APIKEYS_ENV) private readonly env: ApiKeysRuntimeEnv,
   ) {}
 
@@ -133,6 +135,7 @@ export class KeysService {
     await this.prisma.apiKeyEvent.create({
       data: { id: `evt_${ulid()}`, apiKeyId: id, kind: 'REVOKED', metadata: { reason } },
     });
+    await this.gatewayCache.invalidate(id);
     this.logger.warn(`apikey revoked id=${id} reason=${reason}`);
     return toPublic(updated);
   }

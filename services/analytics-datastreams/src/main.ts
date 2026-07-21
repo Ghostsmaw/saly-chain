@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { loadEnv } from '@salychain/config';
+import { assertProductionPosture, internalAuthMiddleware, loadEnv } from '@salychain/config';
 import { initTelemetry, bootstrapHttpObservability } from '@salychain/observability';
 import { createLogger } from '@salychain/logger';
 import { AppModule } from './app.module.js';
@@ -16,6 +16,13 @@ async function bootstrap() {
     env: env.NODE_ENV,
     level: env.LOG_LEVEL,
   });
+  assertProductionPosture(env.NODE_ENV, [
+    {
+      when: !env.INTERNAL_SERVICE_TOKEN,
+      message: 'INTERNAL_SERVICE_TOKEN must be set — analytics-datastreams must not run open',
+    },
+  ]);
+
 
   initTelemetry({
     serviceName: 'analytics-datastreams',
@@ -24,6 +31,14 @@ async function bootstrap() {
   });
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.use(
+    internalAuthMiddleware({
+      serviceName: 'analytics-datastreams',
+      token: env.INTERNAL_SERVICE_TOKEN,
+      nodeEnv: env.NODE_ENV,
+      warn: (msg) => logger.warn(msg),
+    }),
+  );
   bootstrapHttpObservability(app, { serviceName: 'analytics-datastreams' });
   // WebSocket sink (live dashboards) shares the HTTP server via the ws adapter.
   app.useWebSocketAdapter(new WsAdapter(app));

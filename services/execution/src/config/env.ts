@@ -21,6 +21,15 @@ export const executionEnvSchema = z.object({
   ESCROW_RESOLVER_WALLET_ID: z.string().uuid().optional(),
   /** Bearer token for admin escrow API (release/refund/list). */
   EXECUTION_ADMIN_TOKEN: z.string().min(16).optional(),
+  /** Token execution presents to wallet's internal escrow-resolve API (defaults to EXECUTION_ADMIN_TOKEN). */
+  WALLET_INTERNAL_ADMIN_TOKEN: z.string().min(16).optional(),
+  /** Shared secret for internal service-to-service calls. Required in production. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
+  /**
+   * Scoped read token for the public explorer (bridge status/list only).
+   * Must differ from INTERNAL_SERVICE_TOKEN.
+   */
+  EXPLORER_READ_TOKEN: z.string().min(16).optional(),
   BASE_NETWORK: z.enum(['base-mainnet', 'base-sepolia']).default('base-sepolia'),
   BASE_RPC_URL: z.string().url().default('https://sepolia.base.org'),
   /** Post ledger reserve/settle journals for chain payouts (disable for legacy dev stacks). */

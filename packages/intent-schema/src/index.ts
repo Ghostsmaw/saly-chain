@@ -24,7 +24,7 @@ export const INTENT_SCHEMA_VERSION = '1' as const;
 export const moneyAmountSchema = z.object({
   amount_minor: z
     .string()
-    .regex(/^-?\d+$/, 'amount_minor must be an integer string in the smallest unit'),
+    .regex(/^[1-9]\d{0,27}$/, 'amount_minor must be a positive integer string (max 28 digits)'),
   currency: z.string().min(3).max(8),
 });
 export type MoneyAmount = z.infer<typeof moneyAmountSchema>;

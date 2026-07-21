@@ -1,0 +1,22 @@
+# Evidence — DR restore drill
+
+- Date (UTC): 2026-07-21
+- Environment: staging (local docker-compose / `salychain-postgres`)
+- Operators: local platform drill (Cursor session)
+- Snapshot / PITR timestamp used: logical `pg_dump -Fc` at drill start `20260721T131401Z` (not AWS RDS PITR)
+- RPO achieved (minutes): **0** (dump taken at drill T0; cloud WAL/PITR lag N/A for compose)
+- RTO wall-clock (minutes): **~2** (91s dump→restore→verify→wait-healthy; pilot target ≤ 4h)
+  - snapshot: 35s
+  - restore to `*_dr_restore`: 17s
+  - integrity verify: <1s
+  - live canary (wait-healthy): included in 91s wall clock
+- Canary: `./scripts/smoke/partner-flow.sh`
+  - First pass during drill: **FAIL** (seed script quote bug blocked `SMOKE_WALLET_ID` export)
+  - After seed fix: **`SMOKE_SKIP_SETTLE=1` → OK** (ACCEPTED + 11 webhook payloads) — log `.dr-artifacts/canary-partner-flow.log`
+- Ledger imbalance check: trial-balance residual on restored `salychain_ledger_dr_restore` = **0**; duplicate SETTLED idempotency keys = **0**; SETTLED rows restored = 1; wallets restored = 11
+- Command: `pnpm dr:restore-drill` (`scripts/dr/restore-drill-local.sh`)
+- Artifacts: `.dr-artifacts/20260721T131401Z/` (gitignored dumps + `summary.txt`)
+- Anomalies / tickets:
+  - Seed ledger-booking quoting fixed in `scripts/smoke/seed-partner-wallet.sh` during drill
+  - This evidence covers **compose logical restore**, not Aurora/RDS PITR — cloud staging PITR still required for go-live §15 production sign-off
+- Sign-off: local staging DR path **pass** (RTO ≪ 4h pilot; residual 0; canary green after seed fix). Cloud PITR evidence: pending platform on-call
